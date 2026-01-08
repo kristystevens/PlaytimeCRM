@@ -6,15 +6,36 @@ This project uses **Supabase** (PostgreSQL) for database management in both loca
 
 ### Local Development
 
-1. **Install Supabase CLI**:
+1. **Install Supabase CLI** (Windows):
+
+   **Option A: Using Scoop (Recommended)**
+   ```powershell
+   # Install Scoop if needed
+   Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+   irm get.scoop.sh | iex
+   
+   # Install Supabase
+   scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+   scoop install supabase
+   ```
+
+   **Option B: Using npx (No installation needed)**
    ```bash
-   npm install -g supabase
+   # Just use npx - works without installation!
    ```
 
 2. **Start Supabase locally**:
+
+   **If using Scoop:**
    ```bash
    supabase init
    supabase start
+   ```
+
+   **If using npx:**
+   ```bash
+   npx supabase init
+   npx supabase start
    ```
 
 3. **Set environment variable**:
@@ -65,11 +86,17 @@ Set in Vercel dashboard with your Supabase connection string.
 ## Useful Commands
 
 ```bash
-# Supabase
+# Supabase (if installed via Scoop)
 supabase start          # Start local Supabase
 supabase stop           # Stop local Supabase
 supabase status         # Check status
 supabase db reset       # Reset local database
+
+# Or using npx (no installation)
+npx supabase start      # Start local Supabase
+npx supabase stop       # Stop local Supabase
+npx supabase status     # Check status
+npx supabase db reset   # Reset local database
 
 # Prisma
 npx prisma db push      # Push schema changes

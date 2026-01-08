@@ -10,15 +10,40 @@
 
 ## Local Development Setup (10 minutes)
 
-### 1. Install Supabase CLI
+### Prerequisites
+- [ ] Install [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [ ] Start Docker Desktop (must be running)
+
+### 1. Install Supabase CLI (or use npx)
+
+**Option A: Using Scoop (Recommended)**
+```powershell
+# Install Scoop if needed
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+irm get.scoop.sh | iex
+
+# Install Supabase
+scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+scoop install supabase
+```
+
+**Option B: Using npx (No installation)**
 ```bash
-npm install -g supabase
+# Just use npx - no installation needed!
 ```
 
 ### 2. Initialize & Start Supabase
+
+**If using Scoop:**
 ```bash
 supabase init
 supabase start
+```
+
+**If using npx:**
+```bash
+npx supabase init
+npx supabase start
 ```
 
 ### 3. Set Local Environment Variable
@@ -91,6 +116,7 @@ npx prisma db push
 
 ## Daily Development Workflow
 
+**If using Scoop:**
 ```bash
 # Start Supabase (if stopped)
 supabase start
@@ -102,8 +128,21 @@ npm run dev
 supabase stop  # Optional: saves resources
 ```
 
+**If using npx:**
+```bash
+# Start Supabase (if stopped)
+npx supabase start
+
+# Start dev server
+npm run dev
+
+# When done
+npx supabase stop  # Optional: saves resources
+```
+
 ## Useful Commands
 
+**If using Scoop:**
 ```bash
 # Supabase status
 supabase status
@@ -116,6 +155,21 @@ supabase db reset
 
 # View logs
 supabase logs
+```
+
+**If using npx:**
+```bash
+# Supabase status
+npx supabase status
+
+# View database in browser
+# http://localhost:54323
+
+# Reset local database
+npx supabase db reset
+
+# View logs
+npx supabase logs
 ```
 
 ## Troubleshooting
