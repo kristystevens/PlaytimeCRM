@@ -1,5 +1,5 @@
-// PostgreSQL schema for production (Vercel-compatible)
-// This uses PostgreSQL database
+// PostgreSQL schema (Supabase-compatible)
+// Works with Supabase for both local development and production
 
 generator client {
   provider = "prisma-client-js"
