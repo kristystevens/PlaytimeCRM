@@ -14,7 +14,7 @@ export async function logActivity(
         entityType,
         entityId,
         action,
-        changes: changes ? JSON.stringify(changes) : null,
+        changes: changes || null,
       },
     })
   } catch (error) {

@@ -1,21 +1,28 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { Agent, Player, Payout, Runner } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 
-type PlayerWithRunner = Player & {
-  assignedRunner: Pick<Runner, 'id' | 'name' | 'telegramHandle'> | null
-}
-
-type AgentWithRelations = Agent & {
-  player: Player | null
-  referredPlayers: PlayerWithRunner[]
-  payouts: Payout[]
-}
+type AgentWithRelations = Prisma.AgentGetPayload<{
+  include: {
+    referredPlayers: {
+      include: {
+        assignedRunner: {
+          select: {
+            id: true,
+            name: true,
+            telegramHandle: true,
+          },
+        },
+      },
+    },
+    payouts: true,
+  },
+}>
 
 export default function AgentDetail({ agent }: { agent: AgentWithRelations }) {
   const router = useRouter()
@@ -54,14 +61,12 @@ export default function AgentDetail({ agent }: { agent: AgentWithRelations }) {
                 {agent.status}
               </Badge>
             </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Primary Platform</div>
-              <div>{agent.primaryPlatform}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground">Rev Share %</div>
-              <div>{Number(agent.revSharePct)}%</div>
-            </div>
+            {agent.timezone && (
+              <div>
+                <div className="text-sm text-muted-foreground">Timezone</div>
+                <div>{agent.timezone}</div>
+              </div>
+            )}
             {agent.player && (
               <div>
                 <div className="text-sm text-muted-foreground">Last Active</div>

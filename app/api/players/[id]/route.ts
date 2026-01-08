@@ -59,7 +59,7 @@ export async function PATCH(
     if (validated.churnRisk !== undefined) updateData.churnRisk = validated.churnRisk
     if (validated.skillLevel !== undefined) updateData.skillLevel = validated.skillLevel
     if (validated.tiltRisk !== undefined) updateData.tiltRisk = validated.tiltRisk
-    if (validated.preferredGames !== undefined) updateData.preferredGames = JSON.stringify(validated.preferredGames)
+    if (validated.preferredGames !== undefined) updateData.preferredGames = validated.preferredGames
     if (validated.notes !== undefined) updateData.notes = validated.notes
     if (validated.assignedRunnerId !== undefined) updateData.assignedRunnerId = validated.assignedRunnerId
     if (validated.referredByAgentId !== undefined) updateData.referredByAgentId = validated.referredByAgentId

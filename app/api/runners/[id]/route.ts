@@ -75,7 +75,7 @@ export async function PATCH(
     if (validated.telegramHandle !== undefined) updateData.telegramHandle = validated.telegramHandle
     if (validated.ginzaUsername !== undefined) updateData.ginzaUsername = validated.ginzaUsername
     if (validated.timezone !== undefined) updateData.timezone = validated.timezone
-    if (validated.languages !== undefined) updateData.languages = JSON.stringify(validated.languages)
+    if (validated.languages !== undefined) updateData.languages = validated.languages
     if (validated.status !== undefined) updateData.status = validated.status
     if (validated.bankrollAccess !== undefined) updateData.bankrollAccess = validated.bankrollAccess
     if (validated.maxTableSize !== undefined) updateData.maxTableSize = validated.maxTableSize

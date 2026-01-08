@@ -226,7 +226,7 @@ export async function POST(request: NextRequest) {
         churnRisk: validated.churnRisk || 'LOW',
         skillLevel: validated.skillLevel || 'AMATEUR',
         tiltRisk: validated.tiltRisk || false,
-        preferredGames: JSON.stringify(validated.preferredGames || []),
+        preferredGames: validated.preferredGames || [],
         notes: validated.notes,
         assignedRunnerId: validated.assignedRunnerId,
         referredByAgentId: validated.referredByAgentId,

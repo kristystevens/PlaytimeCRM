@@ -61,12 +61,8 @@ export default function RunnerDetail({ runner }: { runner: RunnerWithRelations }
             <div>
               <div className="text-sm text-muted-foreground">Languages</div>
               <div>{(() => {
-                try {
-                  const langs = JSON.parse(runner.languages || '[]')
-                  return Array.isArray(langs) && langs.length > 0 ? langs.join(', ') : 'None'
-                } catch {
-                  return 'None'
-                }
+                const langs = Array.isArray(runner.languages) ? runner.languages : []
+                return langs.length > 0 ? langs.join(', ') : 'None'
               })()}</div>
             </div>
             <div>

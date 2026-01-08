@@ -88,7 +88,7 @@ export async function POST(request: NextRequest) {
         ginzaUsername: validated.ginzaUsername,
         playerId: player.id,
         timezone: validated.timezone,
-        languages: JSON.stringify(validated.languages || []),
+        languages: validated.languages || [],
         status: validated.status || 'TRUSTED',
         bankrollAccess: validated.bankrollAccess || false,
         maxTableSize: validated.maxTableSize || 6,

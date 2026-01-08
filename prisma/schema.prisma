@@ -1,17 +1,17 @@
-// SQLite-compatible schema (no Docker needed!)
-// This uses local file storage (dev.db)
+// PostgreSQL schema for production (Vercel-compatible)
+// This uses PostgreSQL database
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-// Note: SQLite doesn't support enums, so we use String with constraints
-// The application code will validate enum values
+// Note: Using String for enums to maintain compatibility with existing code
+// PostgreSQL supports native enums, but we keep String for flexibility
 
 model User {
   id           String   @id @default(uuid())
@@ -43,15 +43,15 @@ model Player {
   churnRisk         String   @default("LOW") @map("churn_risk") // LOW, MED, HIGH
   skillLevel        String   @default("AMATEUR") @map("skill_level") // WHALE, PRO, NIT, AMATEUR, PUNTER
   tiltRisk          Boolean  @default(false) @map("tilt_risk")
-  preferredGames    String   @default("[]") @map("preferred_games") // JSON array as string
+  preferredGames    Json     @default("[]") @map("preferred_games") // JSON array
   notes             String?
   assignedRunnerId  String?  @map("assigned_runner_id")
   referredByAgentId String?  @map("referred_by_agent_id")
   lastActiveAt      DateTime? @map("last_active_at")
-  totalDeposited    Float    @default(0) @map("total_deposited")
-  totalWagered      Float    @default(0) @map("total_wagered")
-  netPnL            Float    @default(0) @map("net_pnl")
-  avgBuyIn          Float    @default(0) @map("avg_buy_in")
+  totalDeposited    Decimal  @default(0) @db.Decimal(18, 2) @map("total_deposited")
+  totalWagered      Decimal  @default(0) @db.Decimal(18, 2) @map("total_wagered")
+  netPnL            Decimal  @default(0) @db.Decimal(18, 2) @map("net_pnl")
+  avgBuyIn          Decimal  @default(0) @db.Decimal(18, 2) @map("avg_buy_in")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -83,15 +83,15 @@ model Runner {
   telegramHandle    String   @unique @map("telegram_handle")
   ginzaUsername     String?  @map("ginza_username")
   timezone          String?
-  languages         String   @default("[]") // JSON array as string
+  languages         Json     @default("[]") // JSON array
   status            String   @default("TRUSTED") // TRUSTED, WATCH, CUT
   bankrollAccess    Boolean  @default(false) @map("bankroll_access")
   maxTableSize      Int      @default(6) @map("max_table_size")
   strikeCount       Int      @default(0) @map("strike_count")
   compType          String   @default("PERCENT") @map("comp_type") // PERCENT, FLAT
-  compValue         Float    @default(0) @map("comp_value")
-  totalPaid         Float    @default(0) @map("total_paid")
-  outstandingBalance Float   @default(0) @map("outstanding_balance")
+  compValue         Decimal  @default(0) @db.Decimal(18, 2) @map("comp_value")
+  totalPaid         Decimal  @default(0) @db.Decimal(18, 2) @map("total_paid")
+  outstandingBalance Decimal @default(0) @db.Decimal(18, 2) @map("outstanding_balance")
   notes             String?
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
@@ -118,10 +118,10 @@ model Agent {
   timezone       String?  @map("timezone")
   primaryPlatform String  @default("TELEGRAM") @map("primary_platform") // TELEGRAM, DISCORD, TWITTER, OTHER
   status         String   @default("ACTIVE") // ACTIVE, INACTIVE, APPROACHING
-  revSharePct    Float    @default(0) @map("rev_share_pct")
-  totalEarned    Float    @default(0) @map("total_earned")
-  totalPaid      Float    @default(0) @map("total_paid")
-  unpaidBalance  Float    @default(0) @map("unpaid_balance")
+  revSharePct    Decimal  @default(0) @db.Decimal(5, 2) @map("rev_share_pct")
+  totalEarned    Decimal  @default(0) @db.Decimal(18, 2) @map("total_earned")
+  totalPaid      Decimal  @default(0) @db.Decimal(18, 2) @map("total_paid")
+  unpaidBalance  Decimal  @default(0) @db.Decimal(18, 2) @map("unpaid_balance")
   notes          String?
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -145,7 +145,7 @@ model ActivityLog {
   entityType String   @map("entity_type") // PLAYER, RUNNER, AGENT, PAYOUT, MESSAGETASK
   entityId   String   @map("entity_id")
   action     String   // CREATE, UPDATE, DELETE, ASSIGN, TAG, PAYOUT
-  changes    String?  // JSON as string
+  changes    Json?    // JSON object
   createdAt  DateTime @default(now()) @map("created_at")
 
   // Relations
@@ -161,7 +161,7 @@ model Payout {
   id         String   @id @default(uuid())
   payeeType  String   @map("payee_type") // RUNNER, AGENT
   payeeId    String   @map("payee_id")
-  amount     Float
+  amount     Decimal  @db.Decimal(18, 2)
   periodStart DateTime @map("period_start")
   periodEnd   DateTime @map("period_end")
   status     String   @default("PENDING") // PENDING, PAID, VOID
