@@ -1,0 +1,296 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  OPS
+  RUNNER
+  AGENT
+}
+
+enum PlayerVipTier {
+  BRONZE
+  SILVER
+  GOLD
+  WHALE
+}
+
+enum PlayerStatus {
+  ACTIVE
+  FADING
+  CHURNED
+}
+
+enum ChurnRisk {
+  LOW
+  MED
+  HIGH
+}
+
+enum RunnerStatus {
+  TRUSTED
+  WATCH
+  CUT
+}
+
+enum CompType {
+  PERCENT
+  FLAT
+}
+
+enum AgentPrimaryPlatform {
+  TELEGRAM
+  DISCORD
+  TWITTER
+  OTHER
+}
+
+enum AgentStatus {
+  SCALING
+  TEST
+  BLOCKED
+}
+
+enum FraudRisk {
+  LOW
+  MED
+  HIGH
+}
+
+enum EntityType {
+  PLAYER
+  RUNNER
+  AGENT
+  PAYOUT
+  MESSAGETASK
+}
+
+enum ActionType {
+  CREATE
+  UPDATE
+  DELETE
+  ASSIGN
+  TAG
+  PAYOUT
+}
+
+enum PayoutStatus {
+  PENDING
+  PAID
+  VOID
+}
+
+enum PayeeType {
+  RUNNER
+  AGENT
+}
+
+enum MessageChannel {
+  TELEGRAM
+  WHATSAPP
+  EMAIL
+  OTHER
+}
+
+enum MessageTemplate {
+  WHALE_CHECKIN
+  REVIVE
+  FOLLOWUP
+}
+
+enum MessageTaskStatus {
+  TODO
+  SENT
+  SKIPPED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  runnerProfile Runner?
+  agentProfile  Agent?
+  activityLogs  ActivityLog[]
+
+  @@map("users")
+}
+
+model Player {
+  id                String        @id @default(uuid())
+  telegramHandle    String        @unique @map("telegram_handle")
+  walletAddress     String?       @unique @map("wallet_address")
+  country           String?
+  joinedAt          DateTime      @default(now()) @map("joined_at")
+  vipTier           PlayerVipTier @default(BRONZE) @map("vip_tier")
+  status            PlayerStatus  @default(ACTIVE)
+  churnRisk         ChurnRisk     @default(LOW) @map("churn_risk")
+  tiltRisk          Boolean       @default(false) @map("tilt_risk")
+  preferredGames    String[]      @default([]) @map("preferred_games")
+  notes             String?
+  assignedRunnerId  String?       @map("assigned_runner_id")
+  referredByAgentId String?       @map("referred_by_agent_id")
+  lastActiveAt      DateTime?     @map("last_active_at")
+  totalDeposited    Decimal       @default(0) @db.Decimal(18, 2) @map("total_deposited")
+  totalWagered      Decimal       @default(0) @db.Decimal(18, 2) @map("total_wagered")
+  netPnL            Decimal       @default(0) @db.Decimal(18, 2) @map("net_pnl")
+  avgBuyIn          Decimal       @default(0) @db.Decimal(18, 2) @map("avg_buy_in")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  assignedRunner Runner?  @relation("PlayerRunner", fields: [assignedRunnerId], references: [id])
+  referredByAgent Agent?  @relation("PlayerAgent", fields: [referredByAgentId], references: [id])
+  messageTasks    MessageTask[]
+
+  @@index([telegramHandle])
+  @@index([walletAddress])
+  @@index([assignedRunnerId])
+  @@index([referredByAgentId])
+  @@index([lastActiveAt])
+  @@index([status])
+  @@index([vipTier])
+  @@map("players")
+}
+
+model Runner {
+  id                String       @id @default(uuid())
+  userId            String?      @unique @map("user_id")
+  name              String
+  telegramHandle    String       @unique @map("telegram_handle")
+  timezone          String?
+  languages         String[]     @default([])
+  status            RunnerStatus @default(TRUSTED)
+  bankrollAccess    Boolean      @default(false) @map("bankroll_access")
+  maxTableSize      Int          @default(6) @map("max_table_size")
+  strikeCount       Int          @default(0) @map("strike_count")
+  compType          CompType     @default(PERCENT) @map("comp_type")
+  compValue         Decimal      @default(0) @db.Decimal(18, 2) @map("comp_value")
+  totalPaid         Decimal      @default(0) @db.Decimal(18, 2) @map("total_paid")
+  outstandingBalance Decimal     @default(0) @db.Decimal(18, 2) @map("outstanding_balance")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  // Relations
+  user            User?          @relation(fields: [userId], references: [id])
+  assignedPlayers Player[]       @relation("PlayerRunner")
+  payouts         Payout[]
+
+  @@index([telegramHandle])
+  @@index([status])
+  @@map("runners")
+}
+
+model Agent {
+  id             String            @id @default(uuid())
+  userId         String?           @unique @map("user_id")
+  name           String
+  telegramHandle String            @unique @map("telegram_handle")
+  primaryPlatform AgentPrimaryPlatform @default(TELEGRAM) @map("primary_platform")
+  status         AgentStatus      @default(TEST)
+  revSharePct    Decimal           @default(0) @db.Decimal(5, 2) @map("rev_share_pct")
+  totalEarned    Decimal           @default(0) @db.Decimal(18, 2) @map("total_earned")
+  totalPaid      Decimal           @default(0) @db.Decimal(18, 2) @map("total_paid")
+  unpaidBalance  Decimal           @default(0) @db.Decimal(18, 2) @map("unpaid_balance")
+  fraudRisk      FraudRisk         @default(LOW) @map("fraud_risk")
+  notes          String?
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  user            User?            @relation(fields: [userId], references: [id])
+  referredPlayers Player[]         @relation("PlayerAgent")
+  payouts         Payout[]
+  messageTasks    MessageTask[]
+
+  @@index([telegramHandle])
+  @@index([status])
+  @@index([fraudRisk])
+  @@map("agents")
+}
+
+model ActivityLog {
+  id         String     @id @default(uuid())
+  actorUserId String    @map("actor_user_id")
+  entityType EntityType @map("entity_type")
+  entityId   String     @map("entity_id")
+  action     ActionType
+  changes    Json?
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  // Relations
+  actor User @relation(fields: [actorUserId], references: [id])
+
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+model Payout {
+  id         String       @id @default(uuid())
+  payeeType  PayeeType    @map("payee_type")
+  payeeId    String       @map("payee_id")
+  amount     Decimal      @db.Decimal(18, 2)
+  periodStart DateTime    @map("period_start")
+  periodEnd   DateTime    @map("period_end")
+  status     PayoutStatus @default(PENDING)
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  // Relations (polymorphic - handled in application code)
+  // Note: Prisma doesn't support true polymorphic relations
+  // We use payeeType + payeeId to determine the entity
+  // These relations are for convenience but may not always match
+  runnerId   String?      @map("runner_id")
+  agentId    String?      @map("agent_id")
+  runner     Runner?      @relation(fields: [runnerId], references: [id])
+  agent      Agent?       @relation(fields: [agentId], references: [id])
+
+  @@index([payeeType, payeeId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([runnerId])
+  @@index([agentId])
+  @@map("payouts")
+}
+
+model MessageTask {
+  id         String            @id @default(uuid())
+  playerId   String?           @map("player_id")
+  agentId    String?           @map("agent_id")
+  runnerId   String?           @map("runner_id")
+  channel    MessageChannel
+  template   MessageTemplate
+  status     MessageTaskStatus @default(TODO)
+  dueAt      DateTime?         @map("due_at")
+  notes      String?
+  createdAt  DateTime          @default(now()) @map("created_at")
+  updatedAt  DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  player Player? @relation(fields: [playerId], references: [id])
+  agent  Agent?  @relation(fields: [agentId], references: [id])
+
+  @@index([status])
+  @@index([dueAt])
+  @@index([playerId])
+  @@index([agentId])
+  @@index([runnerId])
+  @@map("message_tasks")
+}
+
