@@ -28,7 +28,7 @@ export default async function AgentDetailPage({ params }: { params: { id: string
     notFound()
   }
 
-  // @ts-expect-error - Prisma type inference issue, but player is included at runtime
-  return <AgentDetail agent={agent} />
+  // Type assertion: Prisma query includes player but TypeScript inference doesn't always match
+  return <AgentDetail agent={agent as any} />
 }
 
