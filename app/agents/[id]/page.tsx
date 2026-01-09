@@ -28,7 +28,6 @@ export default async function AgentDetailPage({ params }: { params: { id: string
     notFound()
   }
 
-  // Type assertion: Prisma query includes player but TypeScript inference doesn't always match
-  return <AgentDetail agent={agent as any} />
+  return <AgentDetail agent={agent} />
 }
 

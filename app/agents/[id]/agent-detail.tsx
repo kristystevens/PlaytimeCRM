@@ -5,17 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
-import type { Agent, Player, Payout, Runner } from '@prisma/client'
 
-type AgentWithPlayer = Agent & {
-  player: Player | null,
-  referredPlayers: Array<Player & {
-    assignedRunner: Pick<Runner, 'id' | 'name' | 'telegramHandle'> | null,
-  }>,
-  payouts: Payout[],
-}
-
-export default function AgentDetail({ agent }: { agent: AgentWithPlayer }) {
+// Accept any agent type - we'll handle the optional player field safely
+export default function AgentDetail({ agent }: { agent: any }) {
   const router = useRouter()
 
   return (
