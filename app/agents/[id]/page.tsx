@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import AgentDetail from './agent-detail'
 
 export default async function AgentDetailPage({ params }: { params: { id: string } }) {
-  const agent = await prisma.agent.findUnique({
+  const agent: any = await prisma.agent.findUnique({
     where: { id },
     include: {
       player: true,
