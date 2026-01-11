@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import AgentDetail from './agent-detail'
 
 export default async function AgentDetailPage({ params }: { params: { id: string } }) {
-  const agent: any = await prisma.agent.findUnique({
+  const agentResult = await prisma.agent.findUnique({
     where: { id },
     include: {
       player: true,
@@ -24,9 +24,12 @@ export default async function AgentDetailPage({ params }: { params: { id: string
     },
   })
 
-  if (!agent) {
+  if (!agentResult) {
     notFound()
   }
+
+  // Explicitly cast to any to bypass TypeScript type checking
+  const agent = agentResult as any
 
   return <AgentDetail agent={agent} />
 }
