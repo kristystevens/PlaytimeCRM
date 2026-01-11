@@ -177,7 +177,7 @@ export default function RunnersTable() {
                   {isEditingGinza ? (
                     <div className="flex items-center gap-2">
                       <Input
-                        value={editValues.ginzaUsername ?? runner.ginzaUsername || ''}
+                        value={(editValues.ginzaUsername ?? runner.ginzaUsername) || ''}
                         onChange={(e) => setEditValues({ ...editValues, ginzaUsername: e.target.value || null })}
                         className="h-8"
                         autoFocus

@@ -14,7 +14,7 @@ export async function logActivity(
         entityType,
         entityId,
         action,
-        changes: changes || null,
+        changes: changes || undefined,
       },
     })
   } catch (error) {

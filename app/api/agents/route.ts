@@ -89,9 +89,7 @@ export async function POST(request: NextRequest) {
         ginzaUsername: validated.ginzaUsername,
         timezone: validated.timezone,
         playerId: player.id,
-        primaryPlatform: validated.primaryPlatform || 'TELEGRAM',
         status: validated.status || 'ACTIVE',
-        revSharePct: validated.revSharePct || 0,
         notes: validated.notes,
       },
       include: {

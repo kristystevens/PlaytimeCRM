@@ -188,7 +188,7 @@ export default function AgentsTable() {
                   {isEditingGinza ? (
                     <div className="flex items-center gap-2">
                       <Input
-                        value={editValues.ginzaUsername ?? agent.ginzaUsername || ''}
+                        value={(editValues.ginzaUsername ?? agent.ginzaUsername) || ''}
                         onChange={(e) => setEditValues({ ...editValues, ginzaUsername: e.target.value || null })}
                         className="h-8"
                         autoFocus

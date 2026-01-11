@@ -69,9 +69,7 @@ export async function PATCH(
     if (validated.telegramHandle !== undefined) updateData.telegramHandle = validated.telegramHandle
     if (validated.ginzaUsername !== undefined) updateData.ginzaUsername = validated.ginzaUsername
     if (validated.timezone !== undefined) updateData.timezone = validated.timezone
-    if (validated.primaryPlatform !== undefined) updateData.primaryPlatform = validated.primaryPlatform
     if (validated.status !== undefined) updateData.status = validated.status
-    if (validated.revSharePct !== undefined) updateData.revSharePct = validated.revSharePct
     if (validated.notes !== undefined) updateData.notes = validated.notes
 
     const agent = await prisma.agent.update({

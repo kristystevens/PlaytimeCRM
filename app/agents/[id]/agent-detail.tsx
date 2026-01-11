@@ -102,7 +102,7 @@ export default function AgentDetail({ agent }: { agent: any }) {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {agent.referredPlayers.map((player) => (
+              {agent.referredPlayers.map((player: any) => (
                 <div key={player.id} className="flex items-center justify-between p-2 border rounded">
                   <Link href={`/players/${player.id}`} className="hover:underline">
                     {player.telegramHandle}
@@ -125,7 +125,7 @@ export default function AgentDetail({ agent }: { agent: any }) {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {agent.payouts.map((payout) => (
+              {agent.payouts.map((payout: any) => (
                 <div key={payout.id} className="flex items-center justify-between p-2 border rounded">
                   <div>
                     <div className="font-medium">${Number(payout.amount).toLocaleString()}</div>

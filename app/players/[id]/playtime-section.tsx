@@ -548,7 +548,7 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
                             <div className="flex items-center gap-2">
                               <Input
                                 type="time"
-                                value={inlineEditValues.startTime ?? entry.startTime || ''}
+                                value={(inlineEditValues.startTime ?? entry.startTime) || ''}
                                 onChange={(e) => setInlineEditValues({ ...inlineEditValues, startTime: e.target.value || null })}
                                 className="h-8"
                                 autoFocus
@@ -579,7 +579,7 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
                             <div className="flex items-center gap-2">
                               <Input
                                 type="time"
-                                value={inlineEditValues.endTime ?? entry.endTime || ''}
+                                value={(inlineEditValues.endTime ?? entry.endTime) || ''}
                                 onChange={(e) => setInlineEditValues({ ...inlineEditValues, endTime: e.target.value || null })}
                                 className="h-8"
                                 autoFocus
