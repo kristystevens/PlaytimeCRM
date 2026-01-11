@@ -31,6 +31,7 @@ export default async function AgentDetailPage({ params }: { params: { id: string
   // Explicitly cast to any to bypass TypeScript type checking
   const agent = agentResult as any
 
+  // @ts-ignore - Prisma type inference issue, player is included at runtime
   return <AgentDetail agent={agent} />
 }
 
