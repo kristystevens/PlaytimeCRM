@@ -4,6 +4,8 @@ import { startOfDay, startOfWeek, startOfMonth, parseISO, format } from 'date-fn
 
 type Granularity = 'daily' | 'weekly' | 'monthly'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
