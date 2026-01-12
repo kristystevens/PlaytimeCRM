@@ -12,7 +12,6 @@ export async function GET(request: NextRequest) {
     // Get all players where isAgent is true
     const agentPlayers = await prisma.player.findMany({
       where: {
-        // @ts-expect-error - isAgent field exists in database but may not be in Prisma types yet
         isAgent: true,
       },
       include: {
@@ -56,7 +55,6 @@ export async function GET(request: NextRequest) {
     // Refetch to get all agents with profiles
     const allAgentPlayers = await prisma.player.findMany({
       where: {
-        // @ts-expect-error - isAgent field exists in database but may not be in Prisma types yet
         isAgent: true,
       },
       include: {
