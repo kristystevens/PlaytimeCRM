@@ -42,7 +42,10 @@ export default function PlaytimeChart() {
   const [topPlayers, setTopPlayers] = useState<TopPlayerData[]>([])
   const [loading, setLoading] = useState(true)
   const [inputDialogOpen, setInputDialogOpen] = useState(false)
-  const [players, setPlayers] = useState<Player[]>([])
+  const [players, setPlayers] = useState<any[]>([])
+  
+  // Ensure players is always an array
+  const safePlayers = Array.isArray(players) ? players : []
   const [selectedPlayerId, setSelectedPlayerId] = useState<string>('')
   const [inputDate, setInputDate] = useState(format(new Date(), 'yyyy-MM-dd'))
   const [inputStartTime, setInputStartTime] = useState('')
@@ -110,10 +113,22 @@ export default function PlaytimeChart() {
   const loadPlayers = async () => {
     try {
       const res = await fetch('/api/players')
+      if (!res.ok) {
+        console.error('Failed to fetch players:', res.status, res.statusText)
+        setPlayers([])
+        return
+      }
       const data = await res.json()
-      setPlayers(data)
+      // Ensure data is always an array
+      if (Array.isArray(data)) {
+        setPlayers(data)
+      } else {
+        console.error('API returned non-array data:', data)
+        setPlayers([])
+      }
     } catch (error) {
       console.error('Error loading players:', error)
+      setPlayers([]) // Set to empty array on error
     }
   }
 
@@ -129,21 +144,22 @@ export default function PlaytimeChart() {
     let startTime: string | undefined = undefined
     let endTime: string | undefined = undefined
 
+    let requestBody: any = {
+      playedOn: inputDate,
+    }
+
     if (inputStartTime && inputEndTime) {
-      // Calculate minutes from HH:mm times
-      const startDateTime = parse(`${inputDate} ${inputStartTime}`, 'yyyy-MM-dd HH:mm', new Date())
-      let endDateTime = parse(`${inputDate} ${inputEndTime}`, 'yyyy-MM-dd HH:mm', new Date())
-      
-      // Handle next day (e.g., 11:30pm to 12:30am)
-      if (endDateTime < startDateTime) {
-        endDateTime = new Date(endDateTime.getTime() + 24 * 60 * 60 * 1000)
+      // If times are provided, send times only (minutes will be calculated on server)
+      requestBody.startTime = inputStartTime
+      requestBody.endTime = inputEndTime
+    } else if (inputMinutes && inputMinutes.trim() !== '') {
+      // If minutes are provided, send minutes only
+      const parsedMinutes = parseInt(inputMinutes)
+      if (isNaN(parsedMinutes) || parsedMinutes < 0) {
+        alert('Please enter a valid number of minutes')
+        return
       }
-      
-      minutes = differenceInMinutes(endDateTime, startDateTime)
-      startTime = inputStartTime // Send as HH:mm format
-      endTime = inputEndTime     // Send as HH:mm format
-    } else if (inputMinutes) {
-      minutes = parseInt(inputMinutes)
+      requestBody.minutes = parsedMinutes
     } else {
       alert('Please provide either start/end time or minutes')
       return
@@ -154,12 +170,7 @@ export default function PlaytimeChart() {
       const res = await fetch(`/api/players/${selectedPlayerId}/playtime`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          playedOn: inputDate,
-          startTime,
-          endTime,
-          minutes,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (res.ok) {
@@ -276,7 +287,7 @@ export default function PlaytimeChart() {
                     <SelectValue placeholder="Select a player" />
                   </SelectTrigger>
                   <SelectContent>
-                    {players.map((player) => (
+                    {safePlayers.map((player) => (
                       <SelectItem key={player.id} value={player.id}>
                         {player.telegramHandle}
                       </SelectItem>

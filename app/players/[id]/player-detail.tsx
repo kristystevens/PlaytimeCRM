@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Player, Runner, Agent } from '@prisma/client'
 import { Button } from '@/components/ui/button'
@@ -26,19 +26,103 @@ type PlayerWithRelations = Player & {
 export default function PlayerDetail({ player: initialPlayer }: { player: PlayerWithRelations }) {
   const router = useRouter()
   const [player, setPlayer] = useState(initialPlayer)
-  const [loading, setLoading] = useState(false)
+  const [localValues, setLocalValues] = useState({
+    telegramHandle: initialPlayer.telegramHandle || '',
+    ginzaUsername: initialPlayer.ginzaUsername || '',
+    country: initialPlayer.country || '',
+    totalDeposited: Number(initialPlayer.totalDeposited),
+    totalWagered: Number(initialPlayer.totalWagered),
+    netPnL: Number(initialPlayer.netPnL),
+    avgBuyIn: Number(initialPlayer.avgBuyIn),
+  })
+  const [saving, setSaving] = useState(false)
   const [runners, setRunners] = useState<Runner[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [activityLogs, setActivityLogs] = useState<any[]>([])
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const pendingUpdatesRef = useRef<Record<string, any>>({})
 
+  // Update local values when player changes
   useEffect(() => {
-    fetch('/api/runners').then(r => r.json()).then(setRunners)
-    fetch('/api/agents').then(r => r.json()).then(setAgents)
-    fetch(`/api/activity?entityType=PLAYER&entityId=${player.id}`).then(r => r.json()).then(setActivityLogs)
+    setLocalValues({
+      telegramHandle: player.telegramHandle || '',
+      ginzaUsername: player.ginzaUsername || '',
+      country: player.country || '',
+      totalDeposited: Number(player.totalDeposited),
+      totalWagered: Number(player.totalWagered),
+      netPnL: Number(player.netPnL),
+      avgBuyIn: Number(player.avgBuyIn),
+    })
   }, [player.id])
 
-  const handleUpdate = async (field: string, value: any) => {
-    setLoading(true)
+  useEffect(() => {
+    fetch('/api/runners')
+      .then(r => r.json())
+      .then(data => setRunners(Array.isArray(data) ? data : []))
+      .catch(err => {
+        console.error('Error fetching runners:', err)
+        setRunners([])
+      })
+    fetch('/api/agents')
+      .then(r => r.json())
+      .then(data => setAgents(Array.isArray(data) ? data : []))
+      .catch(err => {
+        console.error('Error fetching agents:', err)
+        setAgents([])
+      })
+    fetch(`/api/activity?entityType=PLAYER&entityId=${player.id}`)
+      .then(r => r.json())
+      .then(data => setActivityLogs(Array.isArray(data) ? data : []))
+      .catch(err => {
+        console.error('Error fetching activity logs:', err)
+        setActivityLogs([])
+      })
+  }, [player.id])
+
+  // Debounced save function
+  const debouncedSave = (field: string, value: any) => {
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    // Store the pending update
+    pendingUpdatesRef.current[field] = value
+
+    // Set new timeout to save after 800ms of no typing
+    saveTimeoutRef.current = setTimeout(async () => {
+      const updates = { ...pendingUpdatesRef.current }
+      pendingUpdatesRef.current = {}
+      
+      setSaving(true)
+      try {
+        const res = await fetch(`/api/players/${player.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates),
+        })
+
+        if (res.ok) {
+          const updated = await res.json()
+          setPlayer(updated)
+        } else {
+          console.error('Failed to update player:', res.status)
+        }
+      } catch (error) {
+        console.error('Error updating player:', error)
+      } finally {
+        setSaving(false)
+      }
+    }, 800)
+  }
+
+  const handleInputChange = (field: string, value: any) => {
+    setLocalValues(prev => ({ ...prev, [field]: value }))
+    debouncedSave(field, value)
+  }
+
+  const handleSelectChange = async (field: string, value: any) => {
+    setSaving(true)
     try {
       const res = await fetch(`/api/players/${player.id}`, {
         method: 'PATCH',
@@ -53,9 +137,18 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
     } catch (error) {
       console.error('Error updating player:', error)
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const valueScore = calculateValueScore(player.totalDeposited, player.totalWagered, player.netPnL)
 
@@ -63,7 +156,7 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">{player.telegramHandle}</h1>
+          <h1 className="text-3xl font-bold">{localValues.telegramHandle || player.telegramHandle}</h1>
           <p className="text-muted-foreground">Player Details</p>
         </div>
         <Button variant="outline" onClick={() => router.push('/players')}>
@@ -78,41 +171,48 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label>Telegram Handle</Label>
-              <Input value={player.telegramHandle} disabled />
-            </div>
-            <div className="space-y-2">
-              <Label>Ginza Username</Label>
+              <Label>Telegram Handle {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
               <Input 
-                value={player.ginzaUsername || ''} 
-                onChange={(e) => handleUpdate('ginzaUsername', e.target.value)}
-                placeholder="Enter Ginza username"
+                value={localValues.telegramHandle} 
+                onChange={(e) => handleInputChange('telegramHandle', e.target.value)}
+                placeholder="Enter Telegram handle"
+                maxLength={40}
               />
             </div>
             <div className="space-y-2">
-              <Label>Wallet Address</Label>
-              <Input value={player.walletAddress || ''} disabled />
+              <Label>Ginza Username {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
+              <Input 
+                value={localValues.ginzaUsername} 
+                onChange={(e) => handleInputChange('ginzaUsername', e.target.value)}
+                placeholder="Enter Ginza username"
+                maxLength={40}
+              />
             </div>
             <div className="space-y-2">
-              <Label>Country</Label>
-              <Input value={player.country || ''} disabled />
+              <Label>Country {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
+              <Input 
+                value={localValues.country} 
+                onChange={(e) => handleInputChange('country', e.target.value)}
+                placeholder="Enter country"
+                maxLength={40}
+              />
             </div>
             <div className="space-y-2">
               <Label>Player Type</Label>
-              <Select value={player.playerType || 'PLAYER'} onValueChange={(val) => handleUpdate('playerType', val)}>
+              <Select value={player.playerType || 'PLAYER'} onValueChange={(val) => handleSelectChange('playerType', val)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="PLAYER">Player</SelectItem>
                   <SelectItem value="RUNNER">Runner</SelectItem>
-                  <SelectItem value="AGENT">Agent</SelectItem>
+                  <SelectItem value="AGENT">Host</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
               <Label>VIP Tier</Label>
-              <Select value={player.vipTier} onValueChange={(val) => handleUpdate('vipTier', val)}>
+              <Select value={player.vipTier} onValueChange={(val) => handleSelectChange('vipTier', val)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -125,7 +225,7 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
             </div>
             <div className="space-y-2">
               <Label>Status</Label>
-              <Select value={player.status} onValueChange={(val) => handleUpdate('status', val)}>
+              <Select value={player.status} onValueChange={(val) => handleSelectChange('status', val)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -138,7 +238,7 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
             </div>
             <div className="space-y-2">
               <Label>Churn Risk</Label>
-              <Select value={player.churnRisk} onValueChange={(val) => handleUpdate('churnRisk', val)}>
+              <Select value={player.churnRisk} onValueChange={(val) => handleSelectChange('churnRisk', val)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -151,7 +251,7 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
             </div>
             <div className="space-y-2">
               <Label>Skill Level</Label>
-              <Select value={player.skillLevel || 'AMATEUR'} onValueChange={(val) => handleUpdate('skillLevel', val)}>
+              <Select value={player.skillLevel || 'AMATEUR'} onValueChange={(val) => handleSelectChange('skillLevel', val)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -163,16 +263,6 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
                   <SelectItem value="PUNTER">Punter</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="tiltRisk"
-                checked={player.tiltRisk}
-                onChange={(e) => handleUpdate('tiltRisk', e.target.checked)}
-                className="rounded"
-              />
-              <Label htmlFor="tiltRisk">Tilt Risk</Label>
             </div>
           </CardContent>
         </Card>
@@ -187,35 +277,35 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
               <div className="text-2xl font-bold">{valueScore.toFixed(2)}</div>
             </div>
             <div className="space-y-2">
-              <Label>Total Deposited</Label>
+              <Label>Total Deposited {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
               <Input
                 type="number"
-                value={Number(player.totalDeposited)}
-                onChange={(e) => handleUpdate('totalDeposited', parseFloat(e.target.value))}
+                value={localValues.totalDeposited}
+                onChange={(e) => handleInputChange('totalDeposited', parseFloat(e.target.value) || 0)}
               />
             </div>
             <div className="space-y-2">
-              <Label>Total Wagered</Label>
+              <Label>Total Wagered {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
               <Input
                 type="number"
-                value={Number(player.totalWagered)}
-                onChange={(e) => handleUpdate('totalWagered', parseFloat(e.target.value))}
+                value={localValues.totalWagered}
+                onChange={(e) => handleInputChange('totalWagered', parseFloat(e.target.value) || 0)}
               />
             </div>
             <div className="space-y-2">
-              <Label>Net PnL</Label>
+              <Label>Net PnL {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
               <Input
                 type="number"
-                value={Number(player.netPnL)}
-                onChange={(e) => handleUpdate('netPnL', parseFloat(e.target.value))}
+                value={localValues.netPnL}
+                onChange={(e) => handleInputChange('netPnL', parseFloat(e.target.value) || 0)}
               />
             </div>
             <div className="space-y-2">
-              <Label>Avg Buy-In</Label>
+              <Label>Avg Buy-In {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
               <Input
                 type="number"
-                value={Number(player.avgBuyIn)}
-                onChange={(e) => handleUpdate('avgBuyIn', parseFloat(e.target.value))}
+                value={localValues.avgBuyIn}
+                onChange={(e) => handleInputChange('avgBuyIn', parseFloat(e.target.value) || 0)}
               />
             </div>
             <div>
@@ -233,48 +323,44 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label>Assigned Runner</Label>
+              <Label>Is Host</Label>
               <Select
-                value={player.assignedRunnerId || 'none'}
-                onValueChange={(val) => handleUpdate('assignedRunnerId', val === 'none' ? null : val)}
+                value={player.isAgent ? 'yes' : 'no'}
+                onValueChange={async (value) => {
+                  const checked = value === 'yes'
+                  try {
+                    const res = await fetch(`/api/players/${player.id}`, {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ isAgent: checked }),
+                    })
+                    if (res.ok) {
+                      const updated = await res.json()
+                      setPlayer(updated)
+                      // Refresh hosts list if needed
+                      const agentsRes = await fetch('/api/agents')
+                      if (agentsRes.ok) {
+                        const agentsData = await agentsRes.json()
+                        setAgents(Array.isArray(agentsData) ? agentsData : [])
+                      }
+                    } else {
+                      const error = await res.json()
+                      alert(error.error || 'Failed to update host status')
+                    }
+                  } catch (error) {
+                    console.error('Error updating isAgent:', error)
+                    alert('Failed to update host status')
+                  }
+                }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select runner" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {runners.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                  ))}
+                  <SelectItem value="yes">Yes</SelectItem>
+                  <SelectItem value="no">No</SelectItem>
                 </SelectContent>
               </Select>
-              {player.assignedRunner && (
-                <div className="text-sm text-muted-foreground">
-                  Current: {player.assignedRunner.name}
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Referred By Agent</Label>
-              <Select
-                value={player.referredByAgentId || 'none'}
-                onValueChange={(val) => handleUpdate('referredByAgentId', val === 'none' ? null : val)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select agent" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {agents.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {player.referredByAgent && (
-                <div className="text-sm text-muted-foreground">
-                  Current: {player.referredByAgent.name}
-                </div>
-              )}
             </div>
           </CardContent>
         </Card>

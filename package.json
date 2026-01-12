@@ -14,7 +14,14 @@
     "db:studio": "prisma studio",
     "test": "vitest",
     "clear-test-data": "tsx scripts/clear-test-data.ts",
-    "seed-playtime": "tsx scripts/seed-playtime-data.ts"
+    "seed-playtime": "tsx scripts/seed-playtime-data.ts",
+    "seed-playtime-2026": "tsx scripts/seed-playtime-data-2026.ts",
+    "update-playtime-year": "tsx scripts/update-playtime-year-2025-to-2026.ts",
+    "add-missing-columns": "tsx scripts/add-missing-columns.ts",
+    "assign-playerids": "tsx scripts/assign-sequential-playerids.ts",
+    "remove-duplicate-playtime": "tsx scripts/remove-duplicate-playtime.ts",
+    "consolidate-ginjongun": "tsx scripts/consolidate-ginjongun.ts",
+    "recalculate-playtime": "tsx scripts/recalculate-playtime-metrics.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.0.0",
@@ -23,6 +30,7 @@
     "@radix-ui/react-dialog": "^1.0.5",
     "@radix-ui/react-dropdown-menu": "^2.0.6",
     "@radix-ui/react-label": "^2.0.1",
+    "@radix-ui/react-popover": "^1.1.15",
     "@radix-ui/react-select": "^2.0.0",
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-tabs": "^1.0.4",

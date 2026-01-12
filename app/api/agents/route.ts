@@ -3,23 +3,96 @@ import { prisma } from '@/lib/prisma'
 import { agentSchema } from '@/lib/validations'
 import { logActivity } from '@/lib/activity-log'
 import { calculateAgentPerformance } from '@/lib/metrics'
+import { getNextPlayerID } from '@/lib/player-id-utils'
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-
-    const agents = await prisma.agent.findMany({
+    // Get all players where isAgent is true
+    const agentPlayers = await prisma.player.findMany({
+      where: {
+        // @ts-expect-error - isAgent field exists in database but may not be in Prisma types yet
+        isAgent: true,
+      },
       include: {
-        player: true,
-        referredPlayers: {
-          select: {
-            id: true,
-            lastActiveAt: true,
-            totalDeposited: true,
-            totalWagered: true,
+        agentProfile: {
+          include: {
+            referredPlayers: {
+              select: {
+                id: true,
+                lastActiveAt: true,
+                totalDeposited: true,
+                totalWagered: true,
+              },
+            },
           },
         },
       },
     })
+
+    // Ensure agentPlayers is an array
+    if (!Array.isArray(agentPlayers)) {
+      console.error('agentPlayers is not an array:', agentPlayers)
+      return NextResponse.json([])
+    }
+
+    // Create agent profiles for players that have isAgent=true but no profile yet
+    for (const player of agentPlayers) {
+      const playerWithProfile = player as any
+      if (!playerWithProfile.agentProfile) {
+        await prisma.agent.create({
+          data: {
+            name: player.telegramHandle,
+            telegramHandle: player.telegramHandle,
+            ginzaUsername: player.ginzaUsername,
+            playerId: player.id,
+            status: 'ACTIVE',
+          },
+        })
+      }
+    }
+
+    // Refetch to get all agents with profiles
+    const allAgentPlayers = await prisma.player.findMany({
+      where: {
+        // @ts-expect-error - isAgent field exists in database but may not be in Prisma types yet
+        isAgent: true,
+      },
+      include: {
+        agentProfile: {
+          include: {
+            referredPlayers: {
+              select: {
+                id: true,
+                lastActiveAt: true,
+                totalDeposited: true,
+                totalWagered: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    // Convert to agent format for compatibility
+    const agents = allAgentPlayers
+      .map((p: any) => {
+        if (!p || !p.agentProfile) return null
+        const agent = p.agentProfile
+        return {
+          ...agent,
+          player: p,
+          referredPlayers: agent.referredPlayers || [],
+        }
+      })
+      .filter((a: any) => a !== null)
+
+    // Ensure agents is an array (should always be, but double-check)
+    if (!Array.isArray(agents)) {
+      console.error('Agents is not an array after map:', agents)
+      return NextResponse.json([])
+    }
 
     // Calculate metrics for each agent
     const agentsWithMetrics = agents.map((agent) => {
@@ -48,7 +121,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(agentsWithMetrics)
   } catch (error) {
     console.error('Error fetching agents:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    // Always return an array, even on error, to prevent .map() errors
+    return NextResponse.json([])
   }
 }
 
@@ -62,22 +136,38 @@ export async function POST(request: NextRequest) {
       where: { telegramHandle: validated.telegramHandle },
     })
 
+    const playerData = {
+      telegramHandle: validated.telegramHandle,
+      ginzaUsername: validated.ginzaUsername,
+      country: validated.country,
+      isAgent: true,
+      vipTier: validated.vipTier || 'MEDIUM',
+      status: validated.status || 'ACTIVE',
+      churnRisk: validated.churnRisk || 'LOW',
+      skillLevel: validated.skillLevel || 'AMATEUR',
+      notes: validated.notes,
+    }
+
     if (!player) {
+      // Always auto-assign sequential playerID for new hosts
+      const playerID = await getNextPlayerID()
       player = await prisma.player.create({
         data: {
-          telegramHandle: validated.telegramHandle,
+          ...playerData,
           playerType: 'AGENT',
-          status: 'ACTIVE',
-          vipTier: 'MEDIUM',
-          churnRisk: 'LOW',
-          skillLevel: 'AMATEUR',
+          playerID: playerID,
         },
       })
     } else {
-      // Update existing player to be an agent
+      // Update existing player to be an agent with all fields
+      // If player doesn't have a playerID, assign one
+      if (!player.playerID) {
+        const playerID = await getNextPlayerID()
+        playerData.playerID = playerID
+      }
       player = await prisma.player.update({
         where: { id: player.id },
-        data: { playerType: 'AGENT' },
+        data: playerData,
       })
     }
 
@@ -89,7 +179,7 @@ export async function POST(request: NextRequest) {
         ginzaUsername: validated.ginzaUsername,
         timezone: validated.timezone,
         playerId: player.id,
-        status: validated.status || 'ACTIVE',
+        status: validated.agentStatus || 'ACTIVE',
         notes: validated.notes,
       },
       include: {

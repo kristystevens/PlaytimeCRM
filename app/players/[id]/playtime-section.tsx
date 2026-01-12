@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { formatMinutes } from '@/lib/playtime-utils'
-import { format, parse, differenceInMinutes } from 'date-fns'
+import { format, parse, differenceInMinutes, parseISO } from 'date-fns'
 import { Pencil, Check, X } from 'lucide-react'
 
 type PlaytimeEntry = {
@@ -24,6 +24,7 @@ type PlaytimeEntry = {
   startTime: string | null
   endTime: string | null
   minutes: number
+  stakes: string | null
 }
 
 type PlaytimeSummary = {
@@ -56,10 +57,12 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
   const [formStartTime, setFormStartTime] = useState('')
   const [formEndTime, setFormEndTime] = useState('')
   const [formMinutes, setFormMinutes] = useState('')
+  const [formStakes, setFormStakes] = useState('')
   const [editFormDate, setEditFormDate] = useState('')
   const [editFormStartTime, setEditFormStartTime] = useState('')
   const [editFormEndTime, setEditFormEndTime] = useState('')
   const [editFormMinutes, setEditFormMinutes] = useState('')
+  const [editFormStakes, setEditFormStakes] = useState('')
   const [editingCell, setEditingCell] = useState<{ entryId: string; field: string } | null>(null)
   const [inlineEditValues, setInlineEditValues] = useState<Record<string, any>>({})
   const [savingInline, setSavingInline] = useState(false)
@@ -126,27 +129,38 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
       let startTime: string | undefined = undefined
       let endTime: string | undefined = undefined
 
+      let requestBody: any = {
+        playedOn: formDate,
+      }
+
       if (formStartTime && formEndTime) {
-        minutes = calculatedFormMinutes
-        startTime = formStartTime // Send as HH:mm format
-        endTime = formEndTime     // Send as HH:mm format
-      } else if (formMinutes) {
-        minutes = parseInt(formMinutes)
+        // If times are provided, send times only (minutes will be calculated on server)
+        requestBody.startTime = formStartTime
+        requestBody.endTime = formEndTime
+      } else if (formMinutes && formMinutes.trim() !== '') {
+        // If minutes are provided, send minutes only
+        const parsedMinutes = parseInt(formMinutes)
+        if (isNaN(parsedMinutes) || parsedMinutes < 0) {
+          alert('Please enter a valid number of minutes')
+          setLoading(false)
+          return
+        }
+        requestBody.minutes = parsedMinutes
       } else {
         alert('Please provide either start/end time or minutes')
         setLoading(false)
         return
       }
 
+      // Add stakes if provided
+      if (formStakes && formStakes.trim() !== '') {
+        requestBody.stakes = formStakes.trim()
+      }
+
       const res = await fetch(`/api/players/${playerId}/playtime`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          playedOn: formDate,
-          startTime,
-          endTime,
-          minutes,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (res.ok) {
@@ -154,6 +168,7 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
         setFormStartTime('')
         setFormEndTime('')
         setFormMinutes('')
+        setFormStakes('')
         loadData()
       } else {
         const error = await res.json()
@@ -173,6 +188,7 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
     setEditFormStartTime(entry.startTime || '')
     setEditFormEndTime(entry.endTime || '')
     setEditFormMinutes(entry.minutes.toString())
+    setEditFormStakes(entry.stakes || '')
     setEditDialogOpen(true)
   }
 
@@ -207,15 +223,24 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
         return
       }
 
+      const updateData: any = {
+        playedOn: editFormDate,
+        startTime,
+        endTime,
+        minutes,
+      }
+
+      // Add stakes if provided
+      if (editFormStakes && editFormStakes.trim() !== '') {
+        updateData.stakes = editFormStakes.trim()
+      } else {
+        updateData.stakes = null
+      }
+
       const res = await fetch(`/api/playtime/${editingEntry.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          playedOn: editFormDate,
-          startTime,
-          endTime,
-          minutes,
-        }),
+        body: JSON.stringify(updateData),
       })
 
       if (res.ok) {
@@ -278,27 +303,61 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
     
     setSavingInline(true)
     try {
+      const entry = entries.find(e => e.id === entryId)
+      if (!entry) {
+        throw new Error('Entry not found')
+      }
+
       const updateData: any = {}
       Object.keys(inlineEditValues).forEach(key => {
-        if (inlineEditValues[key] !== undefined) {
+        if (inlineEditValues[key] !== undefined && inlineEditValues[key] !== null && inlineEditValues[key] !== '') {
           updateData[key] = inlineEditValues[key]
         }
       })
 
-      // If startTime and endTime are both provided, calculate minutes
-      if (updateData.startTime && updateData.endTime && !updateData.minutes) {
-        const entry = entries.find(e => e.id === entryId)
-        if (entry) {
-          const dateStr = updateData.playedOn || format(new Date(entry.playedOn), 'yyyy-MM-dd')
-          const startDateTime = parse(`${dateStr} ${updateData.startTime}`, 'yyyy-MM-dd HH:mm', new Date())
-          let endDateTime = parse(`${dateStr} ${updateData.endTime}`, 'yyyy-MM-dd HH:mm', new Date())
+      // Get the date to use for calculation (use updated date or existing date)
+      const dateStr = updateData.playedOn || format(new Date(entry.playedOn), 'yyyy-MM-dd')
+      
+      // Get start and end times (use updated values or existing values)
+      const startTime = updateData.startTime !== undefined ? updateData.startTime : entry.startTime
+      const endTime = updateData.endTime !== undefined ? updateData.endTime : entry.endTime
+
+      // If both startTime and endTime are available, always recalculate minutes
+      if (startTime && endTime) {
+        try {
+          const startDateTime = parse(`${dateStr} ${startTime}`, 'yyyy-MM-dd HH:mm', new Date())
+          let endDateTime = parse(`${dateStr} ${endTime}`, 'yyyy-MM-dd HH:mm', new Date())
           
+          // Handle next day (e.g., 11:30pm to 12:30am)
           if (endDateTime < startDateTime) {
             endDateTime = new Date(endDateTime.getTime() + 24 * 60 * 60 * 1000)
           }
           
-          updateData.minutes = Math.max(0, differenceInMinutes(endDateTime, startDateTime))
+          const calculatedMinutes = Math.max(0, differenceInMinutes(endDateTime, startDateTime))
+          updateData.minutes = calculatedMinutes
+          
+          // Update the inline edit values to show the calculated minutes
+          setInlineEditValues({ ...inlineEditValues, minutes: calculatedMinutes })
+        } catch (error) {
+          console.error('Error calculating minutes from times:', error)
+          // If calculation fails, keep the existing minutes or use the manually entered value
+          if (updateData.minutes === undefined) {
+            updateData.minutes = entry.minutes
+          }
         }
+      } else if (updateData.minutes !== undefined) {
+        // If only minutes is being updated, use that value
+        // No need to recalculate
+      } else if (startTime || endTime) {
+        // If only one time is provided, we can't calculate, so keep existing minutes
+        if (updateData.minutes === undefined) {
+          updateData.minutes = entry.minutes
+        }
+      }
+
+      // Ensure playedOn is in the correct format
+      if (updateData.playedOn) {
+        updateData.playedOn = format(parseISO(updateData.playedOn), 'yyyy-MM-dd')
       }
 
       const res = await fetch(`/api/playtime/${entryId}`, {
@@ -308,15 +367,16 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
       })
 
       if (!res.ok) {
-        throw new Error('Failed to update entry')
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to update entry')
       }
 
       await loadData()
       setEditingCell(null)
       setInlineEditValues({})
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving inline edit:', error)
-      alert('Failed to save changes')
+      alert(error.message || 'Failed to save changes')
     } finally {
       setSavingInline(false)
     }
@@ -413,6 +473,17 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
                 />
               </div>
             </div>
+            <div>
+              <Label htmlFor="stakes">Stakes</Label>
+              <Input
+                id="stakes"
+                type="text"
+                value={formStakes}
+                onChange={(e) => setFormStakes(e.target.value)}
+                placeholder="e.g., $1/$2, $2/$5"
+                maxLength={50}
+              />
+            </div>
             {(formStartTime && formEndTime) && calculatedFormMinutes > 0 && (
               <div className="text-sm text-muted-foreground">
                 Calculated: {formatMinutes(calculatedFormMinutes)}
@@ -500,6 +571,7 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
                     <th className="text-left p-2">End Time</th>
                     <th className="text-left p-2">Minutes</th>
                     <th className="text-left p-2">Hours:Minutes</th>
+                    <th className="text-left p-2">Stakes</th>
                     <th className="text-right p-2">Actions</th>
                   </tr>
                 </thead>
@@ -613,6 +685,7 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
                                 value={inlineEditValues.minutes ?? entry.minutes}
                                 onChange={(e) => setInlineEditValues({ ...inlineEditValues, minutes: parseInt(e.target.value) || 0 })}
                                 className="h-8 w-20"
+                                min="0"
                                 autoFocus
                               />
                               <Button size="sm" variant="ghost" onClick={() => handleSaveInlineEdit(entry.id)} disabled={savingInline}>
@@ -636,7 +709,17 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
                             </div>
                           )}
                         </td>
-                        <td className="p-2">{formatMinutes(entry.minutes)}</td>
+                        <td className="p-2">
+                          <span className="font-medium">{formatMinutes(entry.minutes)}</span>
+                          {isEditingStartTime || isEditingEndTime ? (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              (will auto-calculate)
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="p-2">
+                          <span>{entry.stakes || '-'}</span>
+                        </td>
                         <td className="p-2 text-right">
                           <Button
                             variant="ghost"
@@ -713,6 +796,17 @@ export default function PlaytimeSection({ playerId }: { playerId: string }) {
                 Calculated: {formatMinutes(calculatedEditFormMinutes)}
               </div>
             )}
+            <div className="space-y-2">
+              <Label htmlFor="edit-stakes">Stakes</Label>
+              <Input
+                id="edit-stakes"
+                type="text"
+                value={editFormStakes}
+                onChange={(e) => setEditFormStakes(e.target.value)}
+                placeholder="e.g., $1/$2, $2/$5"
+                maxLength={50}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditDialogOpen(false)}>

@@ -3,13 +3,15 @@ import { z } from 'zod'
 export const playerSchema = z.object({
   telegramHandle: z.string().min(1, 'Telegram handle is required'),
   ginzaUsername: z.string().optional().nullable(),
-  walletAddress: z.string().optional().nullable(),
   country: z.string().optional().nullable(),
   playerType: z.enum(['PLAYER', 'RUNNER', 'AGENT']).optional(),
+  isRunner: z.boolean().optional(),
+  isAgent: z.boolean().optional(),
+  // playerID is auto-assigned and cannot be updated by users
   vipTier: z.enum(['HIGH', 'MEDIUM', 'LOW']).optional(),
   status: z.enum(['ACTIVE', 'FADING', 'CHURNED']).optional(),
   churnRisk: z.enum(['LOW', 'MED', 'HIGH']).optional(),
-  skillLevel: z.enum(['WHALE', 'PRO', 'NIT', 'AMATEUR', 'PUNTER']).optional(),
+  skillLevel: z.enum(['WHALE', 'PRO', 'NIT', 'AMATEUR', 'PUNTER', 'INTERMEDIATE', 'ADVANCED', 'PROFESSIONAL']).optional(),
   tiltRisk: z.boolean().optional(),
   preferredGames: z.array(z.string()).optional(),
   notes: z.string().optional().nullable(),
@@ -34,6 +36,7 @@ export const runnerSchema = z.object({
   strikeCount: z.number().int().min(0).optional(),
   compType: z.enum(['PERCENT', 'FLAT']).optional(),
   compValue: z.number().optional(),
+  notes: z.string().optional().nullable(),
 })
 
 export const agentSchema = z.object({
@@ -70,6 +73,7 @@ export const playtimeEntrySchema = z.object({
   startTime: z.string().optional(), // HH:mm format or ISO datetime string
   endTime: z.string().optional(), // HH:mm format or ISO datetime string
   minutes: z.number().int().min(0, 'Minutes must be non-negative').optional(),
+  stakes: z.string().optional().nullable(), // Stakes information
 }).refine(data => {
   if (data.startTime && data.endTime && data.minutes === undefined) {
     return true; // Minutes will be calculated
@@ -88,5 +92,5 @@ export const playtimeUpdateSchema = z.object({
   startTime: z.string().optional(), // ISO datetime string
   endTime: z.string().optional(), // ISO datetime string
   minutes: z.number().int().min(0, 'Minutes must be non-negative').optional(),
+  stakes: z.string().optional().nullable(), // Stakes information
 })
-

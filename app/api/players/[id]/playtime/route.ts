@@ -60,6 +60,7 @@ export async function POST(
         minutes,
         startTime: startTimeStr,
         endTime: endTimeStr,
+        stakes: validated.stakes || null,
       },
       create: {
         playerId: params.id,
@@ -67,6 +68,7 @@ export async function POST(
         startTime: startTimeStr,
         endTime: endTimeStr,
         minutes,
+        stakes: validated.stakes || null,
       },
     })
 

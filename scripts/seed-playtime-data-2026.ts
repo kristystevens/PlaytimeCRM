@@ -10,7 +10,7 @@ function calculateMinutes(startTime: string, endTime: string): number {
   const [endHour, endMin] = endTime.split(':').map(Number)
   
   // Create date objects for calculation (using a reference date)
-  const refDate = new Date('2025-01-01')
+  const refDate = new Date('2026-01-01')
   const start = new Date(refDate)
   start.setHours(startHour, startMin, 0, 0)
   
@@ -51,11 +51,42 @@ function parseTime(timeStr: string): string {
   return cleaned
 }
 
-// Playtime data for 2025
+// Helper to get the next sequential playerID
+let nextPlayerID: number | null = null
+
+async function getNextPlayerID(): Promise<string> {
+  if (nextPlayerID === null) {
+    // Find the highest existing numeric playerID
+    const players = await prisma.player.findMany({
+      where: {
+        playerID: { not: null },
+      },
+      select: { playerID: true },
+    })
+
+    let maxID = 0
+    for (const player of players) {
+      if (player.playerID) {
+        const numericID = parseInt(player.playerID)
+        if (!isNaN(numericID) && numericID > maxID) {
+          maxID = numericID
+        }
+      }
+    }
+
+    nextPlayerID = maxID + 1
+  }
+
+  const id = nextPlayerID.toString()
+  nextPlayerID++
+  return id
+}
+
+// Playtime data for 2026
 const playtimeData = [
-  // 01/06/2025 (January 6, 2025)
+  // 01/06/2026 (January 6, 2026)
   {
-    date: '2025-01-06',
+    date: '2026-01-06',
     entries: [
       { handle: 'Qausar', startTime: '23:30', endTime: '00:30', minutes: 60 }, // 11:30pm-12:30am (next day) = 1 hour
       { handle: 'Littlepony', startTime: '00:00', endTime: '03:00', minutes: 180 }, // 12am-3am = 3 hours
@@ -66,13 +97,13 @@ const playtimeData = [
       { handle: 'Json', startTime: '02:32', endTime: '05:18', minutes: 166 }, // 2:32am-5:18am = 2h 46m
       { handle: '2by4', startTime: '03:17', endTime: '04:56', minutes: 99 }, // 3:17am-4:56am = 1h 39m
       { handle: '2by4', startTime: '06:00', endTime: '07:30', minutes: 90 }, // 6am-7:30am = 1h 30m
-      { handle: 'Gingjongun', startTime: '03:30', endTime: '07:30', minutes: 240 }, // 3:30am-7:30am = 4 hours
+      { handle: 'Ginjongun', startTime: '03:30', endTime: '07:30', minutes: 240 }, // 3:30am-7:30am = 4 hours (fixed typo: Gingjongun -> Ginjongun)
       { handle: 'Hassan', startTime: '04:30', endTime: '04:47', minutes: 17 }, // 4:30am-4:47am = 17 min
     ],
   },
-  // 01/07/2025 (January 7, 2025)
+  // 01/07/2026 (January 7, 2026)
   {
-    date: '2025-01-07',
+    date: '2026-01-07',
     entries: [
       { handle: 'Ginjongun', startTime: '06:00', endTime: '11:04', minutes: 304 }, // 6am-11:04am = 5h 4m
       { handle: 'Littlepony', startTime: '06:00', endTime: '10:42', minutes: 282 }, // 6am-10:42am = 4h 42m
@@ -90,7 +121,7 @@ const playtimeData = [
 ]
 
 async function main() {
-  console.log('Seeding playtime data for 2025...\n')
+  console.log('Seeding playtime data for 2026...\n')
 
   for (const dayData of playtimeData) {
     const date = startOfDay(parse(dayData.date, 'yyyy-MM-dd', new Date()))
@@ -98,7 +129,7 @@ async function main() {
 
     for (const entry of dayData.entries) {
       try {
-        // Find or create player
+        // Find or create player (check for exact match first, then case-insensitive)
         let player = await prisma.player.findFirst({
           where: {
             OR: [
@@ -109,9 +140,13 @@ async function main() {
         })
 
         if (!player) {
+          // Get next sequential playerID
+          const playerID = await getNextPlayerID()
+          
           player = await prisma.player.create({
             data: {
               telegramHandle: entry.handle,
+              playerID: playerID,
               status: 'ACTIVE',
               playerType: 'PLAYER',
               vipTier: 'MEDIUM',
@@ -119,7 +154,15 @@ async function main() {
               skillLevel: 'AMATEUR',
             },
           })
-          console.log(`  ✓ Created player: ${entry.handle}`)
+          console.log(`  ✓ Created player: ${entry.handle} (ID: ${playerID})`)
+        } else if (!player.playerID || isNaN(parseInt(player.playerID))) {
+          // If player exists but has no playerID or non-numeric ID, assign sequential one
+          const playerID = await getNextPlayerID()
+          player = await prisma.player.update({
+            where: { id: player.id },
+            data: { playerID: playerID },
+          })
+          console.log(`  ✓ Assigned playerID to existing player: ${entry.handle} (ID: ${playerID})`)
         }
 
         // For players with multiple entries on the same day, we need to handle them differently
@@ -132,8 +175,7 @@ async function main() {
         })
 
         if (existingEntry) {
-          // If entry exists, check if this is a duplicate or a second session
-          // For now, we'll update by adding minutes and keeping the earliest start/latest end
+          // If entry exists, update by adding minutes and keeping the earliest start/latest end
           const newMinutes = existingEntry.minutes + entry.minutes
           const newStartTime = existingEntry.startTime && entry.startTime
             ? (existingEntry.startTime < entry.startTime ? existingEntry.startTime : entry.startTime)

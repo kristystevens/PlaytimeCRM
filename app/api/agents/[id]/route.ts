@@ -4,6 +4,8 @@ import { agentSchema } from '@/lib/validations'
 import { logActivity } from '@/lib/activity-log'
 import { calculateAgentPerformance } from '@/lib/metrics'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -32,7 +34,7 @@ export async function GET(
     })
 
     if (!agent) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Host not found' }, { status: 404 })
     }
 
     const performance = calculateAgentPerformance(agent.referredPlayers)
@@ -61,7 +63,7 @@ export async function PATCH(
     })
 
     if (!existing) {
-      return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Host not found' }, { status: 404 })
     }
 
     const updateData: any = {}

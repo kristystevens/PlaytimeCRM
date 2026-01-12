@@ -4,6 +4,14 @@ import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import Link from 'next/link'
 import { Runner } from '@prisma/client'
 import { Pencil, Check, X } from 'lucide-react'
@@ -36,9 +44,11 @@ export default function RunnersTable() {
     try {
       const res = await fetch('/api/runners')
       const data = await res.json()
-      setRunners(data)
+      // Ensure data is always an array
+      setRunners(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Error fetching runners:', error)
+      setRunners([]) // Set to empty array on error
     } finally {
       setLoading(false)
     }
@@ -99,15 +109,21 @@ export default function RunnersTable() {
             <th className="px-4 py-2 text-left font-medium">Name</th>
             <th className="px-4 py-2 text-left font-medium">Telegram</th>
             <th className="px-4 py-2 text-left font-medium">Ginza Username</th>
+            <th className="px-4 py-2 text-left font-medium">Status</th>
+            <th className="px-4 py-2 text-left font-medium">Timezone</th>
+            <th className="px-4 py-2 text-left font-medium">Notes</th>
             <th className="px-4 py-2 text-left font-medium">Referred Players</th>
             <th className="px-4 py-2 text-left font-medium">Last Active</th>
           </tr>
         </thead>
         <tbody>
-          {runners.map((runner) => {
+          {Array.isArray(runners) && runners.map((runner) => {
             const isEditingName = editingCell?.rowId === runner.id && editingCell?.field === 'name'
             const isEditingTelegram = editingCell?.rowId === runner.id && editingCell?.field === 'telegramHandle'
             const isEditingGinza = editingCell?.rowId === runner.id && editingCell?.field === 'ginzaUsername'
+            const isEditingStatus = editingCell?.rowId === runner.id && editingCell?.field === 'status'
+            const isEditingTimezone = editingCell?.rowId === runner.id && editingCell?.field === 'timezone'
+            const isEditingNotes = editingCell?.rowId === runner.id && editingCell?.field === 'notes'
 
             return (
               <tr key={runner.id} className="border-b hover:bg-muted/50">
@@ -197,6 +213,108 @@ export default function RunnersTable() {
                         variant="ghost"
                         className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
                         onClick={() => handleStartEdit(runner.id, 'ginzaUsername', runner.ginzaUsername)}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-2">
+                  {isEditingStatus ? (
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={editValues.status ?? runner.status}
+                        onValueChange={(value) => setEditValues({ ...editValues, status: value })}
+                      >
+                        <SelectTrigger className="h-8 w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="TRUSTED">TRUSTED</SelectItem>
+                          <SelectItem value="WATCH">WATCH</SelectItem>
+                          <SelectItem value="CUT">CUT</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(runner.id)} disabled={saving}>
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 group">
+                      <Badge variant={runner.status === 'TRUSTED' ? 'default' : runner.status === 'WATCH' ? 'secondary' : 'destructive'}>
+                        {runner.status}
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                        onClick={() => handleStartEdit(runner.id, 'status', runner.status)}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-2">
+                  {isEditingTimezone ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={(editValues.timezone ?? runner.timezone) || ''}
+                        onChange={(e) => setEditValues({ ...editValues, timezone: e.target.value || null })}
+                        className="h-8 w-32"
+                        placeholder="e.g., EST, PST"
+                        autoFocus
+                      />
+                      <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(runner.id)} disabled={saving}>
+                        <Check className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 group">
+                      <span className="text-sm">{runner.timezone || '-'}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                        onClick={() => handleStartEdit(runner.id, 'timezone', runner.timezone)}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                </td>
+                <td className="px-4 py-2 max-w-xs">
+                  {isEditingNotes ? (
+                    <div className="flex items-start gap-2">
+                      <Textarea
+                        value={(editValues.notes ?? runner.notes) || ''}
+                        onChange={(e) => setEditValues({ ...editValues, notes: e.target.value || null })}
+                        className="h-16 min-w-[200px]"
+                        autoFocus
+                      />
+                      <div className="flex flex-col gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(runner.id)} disabled={saving}>
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2 group">
+                      <span className="text-sm truncate max-w-[200px]">{runner.notes || '-'}</span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
+                        onClick={() => handleStartEdit(runner.id, 'notes', runner.notes)}
                       >
                         <Pencil className="h-3 w-3" />
                       </Button>

@@ -8,7 +8,14 @@ export default function AgentsExportButton() {
     try {
       // Fetch all agents
       const res = await fetch('/api/agents')
-      const agents = await res.json()
+      const data = await res.json()
+      
+      // Ensure agents is an array
+      if (!Array.isArray(data)) {
+        throw new Error('Invalid response: expected array of agents')
+      }
+      
+      const agents = data
 
       // Convert to CSV
       const headers = [

@@ -8,7 +8,17 @@ export default function PlayersTableExportButton() {
     try {
       // Fetch all players without filters
       const res = await fetch('/api/players')
-      const players = await res.json()
+      if (!res.ok) {
+        throw new Error('Failed to fetch players')
+      }
+      const data = await res.json()
+      
+      // Ensure players is an array
+      if (!Array.isArray(data)) {
+        throw new Error('Invalid response: expected array of players')
+      }
+      
+      const players = data
 
       // Convert to CSV
       const headers = [
@@ -22,8 +32,7 @@ export default function PlayersTableExportButton() {
         'Last Active',
         'Most Active Times (EST)',
         'Total Playtime',
-        'Runner',
-        'Agent',
+        'Is Host',
         'Notes',
       ]
 
@@ -54,8 +63,7 @@ export default function PlayersTableExportButton() {
           formatDate(player.lastActiveAt),
           player.mostActiveTimes || '',
           formatMinutes(player.totalPlaytime || 0),
-          player.assignedRunner?.name || '',
-          player.referredByAgent?.name || '',
+          player.isAgent ? 'Yes' : 'No',
           player.notes || '',
         ]
       })

@@ -119,11 +119,11 @@ export default function RunnerDetail({ runner }: { runner: any }) {
 
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Assigned Players ({runner.assignedPlayers.length})</CardTitle>
+            <CardTitle>Assigned Players ({Array.isArray(runner.assignedPlayers) ? runner.assignedPlayers.length : 0})</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {runner.assignedPlayers.map((player: any) => (
+              {Array.isArray(runner.assignedPlayers) && runner.assignedPlayers.map((player: any) => (
                 <div key={player.id} className="flex items-center justify-between p-2 border rounded">
                   <Link href={`/players/${player.id}`} className="hover:underline">
                     {player.telegramHandle}
@@ -133,7 +133,7 @@ export default function RunnerDetail({ runner }: { runner: any }) {
                   </div>
                 </div>
               ))}
-              {runner.assignedPlayers.length === 0 && (
+              {(!Array.isArray(runner.assignedPlayers) || runner.assignedPlayers.length === 0) && (
                 <div className="text-sm text-muted-foreground">No assigned players</div>
               )}
             </div>
@@ -146,7 +146,7 @@ export default function RunnerDetail({ runner }: { runner: any }) {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {runner.payouts.map((payout: any) => (
+              {Array.isArray(runner.payouts) && runner.payouts.map((payout: any) => (
                 <div key={payout.id} className="flex items-center justify-between p-2 border rounded">
                   <div>
                     <div className="font-medium">${Number(payout.amount).toLocaleString()}</div>
@@ -159,7 +159,7 @@ export default function RunnerDetail({ runner }: { runner: any }) {
                   </Badge>
                 </div>
               ))}
-              {runner.payouts.length === 0 && (
+              {(!Array.isArray(runner.payouts) || runner.payouts.length === 0) && (
                 <div className="text-sm text-muted-foreground">No payouts yet</div>
               )}
             </div>

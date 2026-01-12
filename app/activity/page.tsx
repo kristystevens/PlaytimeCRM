@@ -72,8 +72,7 @@ export default function ActivityPage() {
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
                 <SelectItem value="PLAYER">Player</SelectItem>
-                <SelectItem value="RUNNER">Runner</SelectItem>
-                <SelectItem value="AGENT">Agent</SelectItem>
+                <SelectItem value="AGENT">Host</SelectItem>
                 <SelectItem value="PAYOUT">Payout</SelectItem>
               </SelectContent>
             </Select>

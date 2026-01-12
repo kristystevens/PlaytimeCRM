@@ -4,6 +4,8 @@ import { runnerSchema } from '@/lib/validations'
 import { logActivity } from '@/lib/activity-log'
 import { calculateRunnerRetention } from '@/lib/metrics'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -13,7 +15,6 @@ export async function GET(
     const runner = await prisma.runner.findUnique({
       where: { id: params.id },
       include: {
-        player: true,
         assignedPlayers: {
           include: {
             referredByAgent: {
@@ -58,7 +59,6 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-
     const body = await request.json()
     const validated = runnerSchema.partial().parse(body)
 
@@ -73,15 +73,10 @@ export async function PATCH(
     const updateData: any = {}
     if (validated.name !== undefined) updateData.name = validated.name
     if (validated.telegramHandle !== undefined) updateData.telegramHandle = validated.telegramHandle
-    if (validated.ginzaUsername !== undefined) updateData.ginzaUsername = validated.ginzaUsername
     if (validated.timezone !== undefined) updateData.timezone = validated.timezone
     if (validated.languages !== undefined) updateData.languages = validated.languages
     if (validated.status !== undefined) updateData.status = validated.status
-    if (validated.bankrollAccess !== undefined) updateData.bankrollAccess = validated.bankrollAccess
-    if (validated.maxTableSize !== undefined) updateData.maxTableSize = validated.maxTableSize
-    if (validated.strikeCount !== undefined) updateData.strikeCount = validated.strikeCount
-    if (validated.compType !== undefined) updateData.compType = validated.compType
-    if (validated.compValue !== undefined) updateData.compValue = validated.compValue
+    if (validated.notes !== undefined) updateData.notes = validated.notes
 
     const runner = await prisma.runner.update({
       where: { id: params.id },

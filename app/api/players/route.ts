@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { playerSchema } from '@/lib/validations'
 import { logActivity } from '@/lib/activity-log'
+import { getNextPlayerID } from '@/lib/player-id-utils'
 import { parse, format, addHours } from 'date-fns'
+
+export const dynamic = 'force-dynamic'
 
 // Round time to nearest hour
 function roundToNearestHour(time: string): string {
@@ -116,12 +119,18 @@ export async function GET(request: NextRequest) {
     if (search) {
       where.OR = [
         { telegramHandle: { contains: search, mode: 'insensitive' } },
-        { walletAddress: { contains: search, mode: 'insensitive' } },
+        { ginzaUsername: { contains: search, mode: 'insensitive' } },
       ]
     }
 
+    // Don't sort by totalPlaytime on server side since it's calculated
     const orderBy: any = {}
-    orderBy[sortBy] = sortOrder
+    if (sortBy !== 'totalPlaytime') {
+      orderBy[sortBy] = sortOrder
+    } else {
+      // Default to lastActiveAt if sorting by totalPlaytime (will be sorted client-side)
+      orderBy['lastActiveAt'] = 'desc'
+    }
 
     const players = await prisma.player.findMany({
       where,
@@ -156,17 +165,38 @@ export async function GET(request: NextRequest) {
       },
     })
 
+    // Ensure players is an array (Prisma always returns an array, but double-check)
+    if (!Array.isArray(players)) {
+      console.error('Players is not an array:', players)
+      return NextResponse.json({ error: 'Invalid data format' }, { status: 500 })
+    }
+
     // Calculate most active play times, total playtime, and last gameplay datetime
-    const playersWithActiveTimes = players.map(player => {
+    const now = new Date()
+    const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000) // 14 days ago
+    
+    const playersWithActiveTimes = await Promise.all(players.map(async (player) => {
+      // Ensure playtimeEntries is an array
+      const playtimeEntries = Array.isArray(player.playtimeEntries) ? player.playtimeEntries : []
+      
       const activeTimes = calculateMostActiveTimes(
-        player.playtimeEntries.filter(e => e.startTime && e.endTime)
+        playtimeEntries.filter(e => e && e.startTime && e.endTime)
       )
-      const totalPlaytime = player.playtimeEntries.reduce((sum, entry) => sum + entry.minutes, 0)
+      // Calculate total playtime - ensure we're summing valid numbers only
+      const totalPlaytime = playtimeEntries.reduce((sum, entry) => {
+        if (!entry) return sum
+        const minutes = entry.minutes
+        // Ensure minutes is a valid number
+        if (typeof minutes === 'number' && !isNaN(minutes) && minutes >= 0) {
+          return sum + minutes
+        }
+        return sum
+      }, 0)
       
       // Calculate last gameplay datetime from most recent playtime entry
       let lastGameplayAt: Date | null = null
-      if (player.playtimeEntries.length > 0) {
-        const mostRecentEntry = player.playtimeEntries[0] // Already sorted by playedOn desc
+      if (playtimeEntries.length > 0) {
+        const mostRecentEntry = playtimeEntries[0] // Already sorted by playedOn desc
         // playedOn is normalized to midnight UTC, so we create a new date from it
         const playedOnDate = new Date(mostRecentEntry.playedOn)
         
@@ -192,18 +222,45 @@ export async function GET(request: NextRequest) {
         }
       }
       
+      // Use gameplay time if available, otherwise fall back to stored lastActiveAt
+      const finalLastActiveAt = lastGameplayAt || player.lastActiveAt
+      
+      // Check if player hasn't played in over 2 weeks and automatically set status to FADING
+      let updatedStatus = player.status
+      if (finalLastActiveAt && player.status === 'ACTIVE') {
+        const lastActiveDate = new Date(finalLastActiveAt)
+        if (lastActiveDate < twoWeeksAgo) {
+          // Update status to FADING in database
+          try {
+            await prisma.player.update({
+              where: { id: player.id },
+              data: { status: 'FADING' },
+            })
+            updatedStatus = 'FADING'
+          } catch (error) {
+            console.error(`Error updating status for player ${player.id}:`, error)
+            // Continue with original status if update fails
+          }
+        }
+      }
+      
       return {
         ...player,
         mostActiveTimes: activeTimes,
         totalPlaytime,
-        lastActiveAt: lastGameplayAt || player.lastActiveAt, // Use gameplay time if available, otherwise fall back to stored lastActiveAt
+        lastActiveAt: finalLastActiveAt,
+        status: updatedStatus,
       }
-    })
+    }))
 
     return NextResponse.json(playersWithActiveTimes)
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching players:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    // Return error details in development, generic message in production
+    const errorMessage = process.env.NODE_ENV === 'development' 
+      ? error?.message || 'Internal server error'
+      : 'Internal server error'
+    return NextResponse.json({ error: errorMessage, details: error?.stack }, { status: 500 })
   }
 }
 
@@ -212,20 +269,25 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const validated = playerSchema.parse(body)
 
-    const playerType = validated.playerType || 'PLAYER'
+    const isRunner = validated.isRunner || false
+    const isAgent = validated.isAgent || false
+    
+    // Always auto-assign sequential playerID
+    const playerID = await getNextPlayerID()
     
     const player = await prisma.player.create({
       data: {
         telegramHandle: validated.telegramHandle,
         ginzaUsername: validated.ginzaUsername,
-        walletAddress: validated.walletAddress,
         country: validated.country,
-        playerType,
+        playerType: validated.playerType || 'PLAYER',
+        isRunner,
+        isAgent,
+        playerID: playerID,
         vipTier: validated.vipTier || 'MEDIUM',
         status: validated.status || 'ACTIVE',
         churnRisk: validated.churnRisk || 'LOW',
         skillLevel: validated.skillLevel || 'AMATEUR',
-        tiltRisk: validated.tiltRisk || false,
         preferredGames: validated.preferredGames || [],
         notes: validated.notes,
         assignedRunnerId: validated.assignedRunnerId,
@@ -242,23 +304,28 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // If playerType is RUNNER or AGENT, create the corresponding profile
-    if (playerType === 'RUNNER') {
+    // If isRunner is true, create the runner profile
+    if (isRunner) {
       await prisma.runner.create({
         data: {
           name: player.telegramHandle,
           telegramHandle: player.telegramHandle,
+          ginzaUsername: player.ginzaUsername,
           playerId: player.id,
           status: 'TRUSTED',
         },
       })
-    } else if (playerType === 'AGENT') {
+    }
+    
+    // If isAgent is true, create the agent profile
+    if (isAgent) {
       await prisma.agent.create({
         data: {
           name: player.telegramHandle,
           telegramHandle: player.telegramHandle,
+          ginzaUsername: player.ginzaUsername,
           playerId: player.id,
-          status: 'TEST',
+          status: 'ACTIVE',
         },
       })
     }

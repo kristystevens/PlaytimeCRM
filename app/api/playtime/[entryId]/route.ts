@@ -70,6 +70,11 @@ export async function PATCH(
       updateData.minutes = validated.minutes
     }
 
+    // Handle stakes
+    if (validated.stakes !== undefined) {
+      updateData.stakes = validated.stakes || null
+    }
+
     // If date is being changed, check for conflicts
     if (validated.playedOn && validated.playedOn !== existing.playedOn.toISOString().split('T')[0]) {
       const newDate = startOfDay(parseISO(validated.playedOn))

@@ -92,7 +92,7 @@ export default function MessagesPage() {
                   </div>
                   <div className="text-sm text-muted-foreground">
                     {task.player?.telegramHandle && `Player: ${task.player.telegramHandle}`}
-                    {task.agent?.name && `Agent: ${task.agent.name}`}
+                    {task.agent?.name && `Host: ${task.agent.name}`}
                     {task.dueAt && ` | Due: ${new Date(task.dueAt).toLocaleString()}`}
                   </div>
                   {task.notes && (

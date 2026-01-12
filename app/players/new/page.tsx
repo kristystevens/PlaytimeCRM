@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 
 export default function NewPlayerPage() {
   const router = useRouter()
@@ -20,24 +21,15 @@ export default function NewPlayerPage() {
   const [formData, setFormData] = useState({
     telegramHandle: '',
     ginzaUsername: '',
-    walletAddress: '',
     country: '',
     vipTier: 'MEDIUM',
     status: 'ACTIVE',
     churnRisk: 'LOW',
     skillLevel: 'AMATEUR',
-    tiltRisk: false,
     notes: '',
-    assignedRunnerId: '',
-    referredByAgentId: '',
+    isRunner: false,
+    isAgent: false,
   })
-  const [runners, setRunners] = useState<any[]>([])
-  const [agents, setAgents] = useState<any[]>([])
-
-  useEffect(() => {
-    fetch('/api/runners').then(r => r.json()).then(setRunners)
-    fetch('/api/agents').then(r => r.json()).then(setAgents)
-  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -49,9 +41,6 @@ export default function NewPlayerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
-          assignedRunnerId: formData.assignedRunnerId || null,
-          referredByAgentId: formData.referredByAgentId || null,
-          walletAddress: formData.walletAddress || null,
           ginzaUsername: formData.ginzaUsername || null,
         }),
       })
@@ -83,8 +72,9 @@ export default function NewPlayerPage() {
               <Input
                 id="telegramHandle"
                 value={formData.telegramHandle}
-                onChange={(e) => setFormData({ ...formData, telegramHandle: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, telegramHandle: e.target.value }))}
                 required
+                maxLength={40}
               />
             </div>
             <div className="space-y-2">
@@ -92,7 +82,8 @@ export default function NewPlayerPage() {
               <Input
                 id="ginzaUsername"
                 value={formData.ginzaUsername}
-                onChange={(e) => setFormData({ ...formData, ginzaUsername: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, ginzaUsername: e.target.value }))}
+                maxLength={40}
               />
             </div>
             <div className="space-y-2">
@@ -100,13 +91,14 @@ export default function NewPlayerPage() {
               <Input
                 id="country"
                 value={formData.country}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, country: e.target.value }))}
+                maxLength={40}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="vipTier">VIP Tier</Label>
-                <Select value={formData.vipTier} onValueChange={(val) => setFormData({ ...formData, vipTier: val })}>
+                <Select value={formData.vipTier} onValueChange={(val) => setFormData(prev => ({ ...prev, vipTier: val }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -119,7 +111,7 @@ export default function NewPlayerPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="status">Status</Label>
-                <Select value={formData.status} onValueChange={(val) => setFormData({ ...formData, status: val })}>
+                <Select value={formData.status} onValueChange={(val) => setFormData(prev => ({ ...prev, status: val }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -134,7 +126,7 @@ export default function NewPlayerPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="churnRisk">Churn Risk</Label>
-                <Select value={formData.churnRisk} onValueChange={(val) => setFormData({ ...formData, churnRisk: val })}>
+                <Select value={formData.churnRisk} onValueChange={(val) => setFormData(prev => ({ ...prev, churnRisk: val }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -147,7 +139,7 @@ export default function NewPlayerPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="skillLevel">Skill Level</Label>
-                <Select value={formData.skillLevel} onValueChange={(val) => setFormData({ ...formData, skillLevel: val })}>
+                <Select value={formData.skillLevel} onValueChange={(val) => setFormData(prev => ({ ...prev, skillLevel: val }))}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -161,40 +153,23 @@ export default function NewPlayerPage() {
                 </Select>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="assignedRunnerId">Assigned Runner</Label>
-              <Select value={formData.assignedRunnerId || "none"} onValueChange={(val) => setFormData({ ...formData, assignedRunnerId: val === "none" ? "" : val })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select runner" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {runners.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="referredByAgentId">Referred By Agent</Label>
-              <Select value={formData.referredByAgentId || "none"} onValueChange={(val) => setFormData({ ...formData, referredByAgentId: val === "none" ? "" : val })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select agent" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {agents.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="isAgent"
+                  checked={formData.isAgent}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isAgent: checked === true }))}
+                />
+                <Label htmlFor="isAgent">Is Host</Label>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>
               <Input
                 id="notes"
                 value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                maxLength={40}
               />
             </div>
             <div className="flex justify-end space-x-2">

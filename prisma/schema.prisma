@@ -38,11 +38,13 @@ model Player {
   country           String?
   joinedAt          DateTime @default(now()) @map("joined_at")
   playerType        String   @default("PLAYER") @map("player_type") // PLAYER, RUNNER, AGENT
+  isRunner          Boolean  @default(false) @map("is_runner")
+  isAgent           Boolean  @default(false) @map("is_agent")
+  playerID          String?  @unique @map("player_id")
   vipTier           String   @default("MEDIUM") @map("vip_tier") // HIGH, MEDIUM, LOW
   status            String   @default("ACTIVE") // ACTIVE, FADING, CHURNED
   churnRisk         String   @default("LOW") @map("churn_risk") // LOW, MED, HIGH
   skillLevel        String   @default("AMATEUR") @map("skill_level") // WHALE, PRO, NIT, AMATEUR, PUNTER
-  tiltRisk          Boolean  @default(false) @map("tilt_risk")
   preferredGames    Json     @default("[]") @map("preferred_games") // JSON array
   notes             String?
   assignedRunnerId  String?  @map("assigned_runner_id")
@@ -222,6 +224,9 @@ model PlaytimeEntry {
   // Minutes played for that date
   minutes   Int      @default(0)
 
+  // Stakes for the playtime session
+  stakes    String?  @map("stakes")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -229,4 +234,3 @@ model PlaytimeEntry {
   @@index([playerId, playedOn])
   @@map("playtime_entries")
 }
-

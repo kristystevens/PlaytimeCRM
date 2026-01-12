@@ -22,9 +22,14 @@ export default function NewAgentPage() {
     name: '',
     telegramHandle: '',
     ginzaUsername: '',
+    country: '',
     timezone: '',
+    vipTier: 'MEDIUM',
     status: 'ACTIVE',
+    churnRisk: 'LOW',
+    skillLevel: 'AMATEUR',
     notes: '',
+    agentStatus: 'ACTIVE',
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,8 +65,8 @@ export default function NewAgentPage() {
     <div className="max-w-2xl mx-auto">
       <Card>
         <CardHeader>
-          <CardTitle>New Agent</CardTitle>
-          <CardDescription>Add a new agent to the system</CardDescription>
+          <CardTitle>New Host</CardTitle>
+          <CardDescription>Add a new host to the system</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -92,6 +97,14 @@ export default function NewAgentPage() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="country">Country</Label>
+              <Input
+                id="country"
+                value={formData.country}
+                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="timezone">Timezone</Label>
               <Select
                 value={formData.timezone}
@@ -114,11 +127,69 @@ export default function NewAgentPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="vipTier">VIP Tier</Label>
+                <Select value={formData.vipTier} onValueChange={(val) => setFormData({ ...formData, vipTier: val })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="HIGH">High</SelectItem>
+                    <SelectItem value="MEDIUM">Medium</SelectItem>
+                    <SelectItem value="LOW">Low</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select value={formData.status} onValueChange={(val) => setFormData({ ...formData, status: val })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">Active</SelectItem>
+                    <SelectItem value="FADING">Fading</SelectItem>
+                    <SelectItem value="CHURNED">Churned</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="churnRisk">Churn Risk</Label>
+                <Select value={formData.churnRisk} onValueChange={(val) => setFormData({ ...formData, churnRisk: val })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LOW">Low</SelectItem>
+                    <SelectItem value="MED">Medium</SelectItem>
+                    <SelectItem value="HIGH">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="skillLevel">Skill Level</Label>
+                <Select value={formData.skillLevel} onValueChange={(val) => setFormData({ ...formData, skillLevel: val })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="WHALE">Whale</SelectItem>
+                    <SelectItem value="PRO">Pro</SelectItem>
+                    <SelectItem value="NIT">Nit</SelectItem>
+                    <SelectItem value="AMATEUR">Amateur</SelectItem>
+                    <SelectItem value="PUNTER">Punter</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
+              <Label htmlFor="agentStatus">Host Status</Label>
               <Select
-                value={formData.status}
-                onValueChange={(val) => setFormData({ ...formData, status: val })}
+                value={formData.agentStatus}
+                onValueChange={(val) => setFormData({ ...formData, agentStatus: val })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -141,7 +212,7 @@ export default function NewAgentPage() {
             </div>
             <div className="flex gap-4">
               <Button type="submit" disabled={loading}>
-                {loading ? 'Creating...' : 'Create Agent'}
+                {loading ? 'Creating...' : 'Create Host'}
               </Button>
               <Button type="button" variant="outline" onClick={() => router.push('/agents')}>
                 Cancel

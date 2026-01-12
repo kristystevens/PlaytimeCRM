@@ -1,14 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  flexRender,
-  createColumnHelper,
-  SortingState,
-} from '@tanstack/react-table'
+import { useState, useEffect, useMemo, Fragment, type MouseEvent, useCallback, startTransition, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -20,882 +14,930 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import Link from 'next/link'
-import { Player, Runner, Agent } from '@prisma/client'
-import { Pencil, Check, X } from 'lucide-react'
 import { formatMinutes } from '@/lib/playtime-utils'
+import { ChevronDown, ChevronUp, ExternalLink, Pencil, Check, X } from 'lucide-react'
+import { Player, Runner, Agent } from '@prisma/client'
 import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 type PlayerWithRelations = Player & {
   assignedRunner: Runner | null
   referredByAgent: Agent | null
-  mostActiveTimes?: string
+  mostActiveTimes?: string | null
   totalPlaytime?: number
+  isRunner?: boolean
+  isAgent?: boolean
+  playerID?: string | null
 }
 
-const columnHelper = createColumnHelper<PlayerWithRelations>()
-
-type EditingCell = {
-  rowId: string
-  field: string
-}
-
-export default function PlayersTable() {
+export default function PlayersTableNew() {
+  const router = useRouter()
   const [players, setPlayers] = useState<PlayerWithRelations[]>([])
   const [loading, setLoading] = useState(true)
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'lastActiveAt', desc: true }])
-  const [filters, setFilters] = useState({
-    playerType: '',
-    status: '',
-    churnRisk: '',
-    assignedRunnerId: '',
-    referredByAgentId: '',
-    country: '',
-    search: '',
-  })
+  // ALWAYS default to sorting by totalPlaytime descending (most to least)
+  const [sortBy, setSortBy] = useState<'lastActiveAt' | 'totalPlaytime'>('totalPlaytime')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  
+  // Ensure sortBy is always 'totalPlaytime' on mount and after data loads
+  useEffect(() => {
+    if (sortBy !== 'totalPlaytime' && safePlayers.length > 0) {
+      // Reset to totalPlaytime if it was changed but we want default behavior
+      // Only do this if user hasn't explicitly clicked a column header
+    }
+  }, [])
   const [runners, setRunners] = useState<Runner[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
-  const [editingCell, setEditingCell] = useState<EditingCell | null>(null)
-  const [editValues, setEditValues] = useState<Record<string, any>>({})
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editingPlayer, setEditingPlayer] = useState<PlayerWithRelations | null>(null)
+  const [editingField, setEditingField] = useState<string>('')
+  const [dialogEditValue, setDialogEditValue] = useState<any>('')
+  const [columnFilters, setColumnFilters] = useState({
+    playerID: '',
+    playerName: '',
+    status: '',
+    totalPlaytime: '',
+    lastActive: '',
+    country: '',
+    skillLevel: '',
+    churnRisk: '',
+    vipTier: '',
+    isRunner: '',
+    isAgent: '',
+  })
+
+  const safeRunners = Array.isArray(runners) ? runners : []
+  const safeAgents = Array.isArray(agents) ? agents : []
+  const safePlayers = Array.isArray(players) ? players : []
+
+  // Filter and apply user sorting - ALWAYS default to totalPlaytime descending
+  const sortedAndFilteredPlayers = useMemo(() => {
+    // Start with players array
+    let result = [...safePlayers]
+
+    // Apply column filters
+    if (columnFilters.playerID) {
+      result = result.filter(p => 
+        (p.playerID || '').toLowerCase().includes(columnFilters.playerID.toLowerCase())
+      )
+    }
+    if (columnFilters.playerName) {
+      result = result.filter(p => 
+        (p.telegramHandle || '').toLowerCase().includes(columnFilters.playerName.toLowerCase()) ||
+        (p.ginzaUsername || '').toLowerCase().includes(columnFilters.playerName.toLowerCase())
+      )
+    }
+    if (columnFilters.status) {
+      result = result.filter(p => p.status === columnFilters.status)
+    }
+    if (columnFilters.totalPlaytime) {
+      const playtimeFilter = columnFilters.totalPlaytime
+      if (playtimeFilter === 'most') {
+        // Show top 20 players by playtime
+        const sortedByPlaytime = [...result].sort((a, b) => {
+          const aPlaytime = parseFloat(String(a.totalPlaytime || 0))
+          const bPlaytime = parseFloat(String(b.totalPlaytime || 0))
+          return bPlaytime - aPlaytime
+        })
+        const top20Playtime = sortedByPlaytime.slice(0, 20).map(p => p.id)
+        result = result.filter(p => top20Playtime.includes(p.id))
+      } else if (playtimeFilter === 'high') {
+        result = result.filter(p => (p.totalPlaytime || 0) >= 1000)
+      } else if (playtimeFilter === 'medium') {
+        result = result.filter(p => (p.totalPlaytime || 0) >= 500 && (p.totalPlaytime || 0) < 1000)
+      } else if (playtimeFilter === 'low') {
+        result = result.filter(p => (p.totalPlaytime || 0) < 500)
+      }
+    }
+    if (columnFilters.lastActive) {
+      const now = new Date()
+      const daysAgo = parseInt(columnFilters.lastActive)
+      if (!isNaN(daysAgo)) {
+        const cutoffDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000)
+        result = result.filter(p => {
+          if (!p.lastActiveAt) return false
+          return new Date(p.lastActiveAt) >= cutoffDate
+        })
+      }
+    }
+    if (columnFilters.country) {
+      result = result.filter(p => 
+        (p.country || '').toLowerCase().includes(columnFilters.country.toLowerCase())
+      )
+    }
+    if (columnFilters.skillLevel) {
+      result = result.filter(p => p.skillLevel === columnFilters.skillLevel)
+    }
+    if (columnFilters.churnRisk) {
+      result = result.filter(p => p.churnRisk === columnFilters.churnRisk)
+    }
+    if (columnFilters.vipTier) {
+      result = result.filter(p => p.vipTier === columnFilters.vipTier)
+    }
+    if (columnFilters.isRunner === 'yes') {
+      result = result.filter(p => p.isRunner === true)
+    } else if (columnFilters.isRunner === 'no') {
+      result = result.filter(p => !p.isRunner)
+    }
+    if (columnFilters.isAgent === 'yes') {
+      result = result.filter(p => p.isAgent === true)
+    } else if (columnFilters.isAgent === 'no') {
+      result = result.filter(p => !p.isAgent)
+    }
+
+    // DEFAULT: Always sort by totalPlaytime descending (most to least)
+    // Only override if user explicitly clicked to sort by lastActiveAt
+    if (sortBy === 'lastActiveAt') {
+      result.sort((a, b) => {
+        const aDate = a.lastActiveAt ? new Date(a.lastActiveAt).getTime() : 0
+        const bDate = b.lastActiveAt ? new Date(b.lastActiveAt).getTime() : 0
+        return sortOrder === 'desc' ? bDate - aDate : aDate - bDate
+      })
+    } else {
+      // Default: sort by totalPlaytime descending (most to least)
+      // This ensures players are ALWAYS organized by playtime from most to least
+      result.sort((a, b) => {
+        const aPlaytime = parseFloat(String(a.totalPlaytime || 0))
+        const bPlaytime = parseFloat(String(b.totalPlaytime || 0))
+        const diff = bPlaytime - aPlaytime // Descending: most to least
+        if (diff !== 0) {
+          return diff
+        }
+        // If playtime is equal, sort by name for consistency
+        return (a.telegramHandle || '').localeCompare(b.telegramHandle || '')
+      })
+      
+      // If user wants ascending, reverse it
+      if (sortOrder === 'asc') {
+        result.reverse()
+      }
+    }
+
+    return result
+  }, [safePlayers, columnFilters, sortBy, sortOrder])
 
   useEffect(() => {
     fetchPlayers()
     fetchRunners()
     fetchAgents()
-  }, [filters, sorting])
+  }, [sortBy, sortOrder])
 
   const fetchPlayers = async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams()
-      if (filters.playerType) params.append('playerType', filters.playerType)
-      if (filters.status) params.append('status', filters.status)
-      if (filters.churnRisk) params.append('churnRisk', filters.churnRisk)
-      if (filters.assignedRunnerId) params.append('assignedRunnerId', filters.assignedRunnerId)
-      if (filters.referredByAgentId) params.append('referredByAgentId', filters.referredByAgentId)
-      if (filters.country) params.append('country', filters.country)
-      if (filters.search) params.append('search', filters.search)
-      if (sorting[0]) {
-        params.append('sortBy', sorting[0].id)
-        params.append('sortOrder', sorting[0].desc ? 'desc' : 'asc')
+      const res = await fetch(`/api/players`)
+      if (!res.ok) {
+        const errorText = await res.text()
+        console.error('Failed to fetch players:', {
+          status: res.status,
+          statusText: res.statusText,
+          url: `/api/players`,
+          error: errorText,
+        })
+        setPlayers([])
+        return
       }
-
-      const res = await fetch(`/api/players?${params}`)
       const data = await res.json()
-      setPlayers(data)
+      if (Array.isArray(data)) {
+        // FORCE sort by totalPlaytime descending (most to least) - this is the default
+        const sortedData = [...data].sort((a, b) => {
+          const aPlaytime = parseFloat(String(a.totalPlaytime || 0))
+          const bPlaytime = parseFloat(String(b.totalPlaytime || 0))
+          // Always sort descending: highest playtime first
+          const diff = bPlaytime - aPlaytime
+          if (diff !== 0) {
+            return diff
+          }
+          // If playtime is equal, sort by name for consistency
+          return (a.telegramHandle || '').localeCompare(b.telegramHandle || '')
+        })
+        
+        // Verify sorting worked - log first few players
+        if (sortedData.length > 0) {
+          const top5 = sortedData.slice(0, 5).map((p, idx) => 
+            `#${idx + 1}: ${p.telegramHandle} = ${p.totalPlaytime || 0} min`
+          )
+          console.log('✅ Players organized by playtime (MOST to LEAST):', top5)
+          
+          // Verify the sort is correct
+          const isSorted = sortedData.every((p, idx) => {
+            if (idx === 0) return true
+            const prevPlaytime = sortedData[idx - 1].totalPlaytime || 0
+            const currPlaytime = p.totalPlaytime || 0
+            return prevPlaytime >= currPlaytime
+          })
+          if (!isSorted) {
+            console.warn('⚠️ WARNING: Players are NOT sorted correctly!')
+          }
+        }
+        
+        setPlayers(sortedData)
+      } else {
+        console.error('Invalid response format:', data)
+        setPlayers([])
+      }
     } catch (error) {
       console.error('Error fetching players:', error)
+      setPlayers([])
     } finally {
       setLoading(false)
     }
   }
 
   const fetchRunners = async () => {
-    const res = await fetch('/api/runners')
-    const data = await res.json()
-    setRunners(data)
+    try {
+      const res = await fetch('/api/runners')
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        setRunners(data)
+      } else {
+        setRunners([])
+      }
+    } catch (error) {
+      console.error('Error fetching runners:', error)
+      setRunners([])
+    }
   }
 
   const fetchAgents = async () => {
-    const res = await fetch('/api/agents')
-    const data = await res.json()
-    setAgents(data)
+    try {
+      const res = await fetch('/api/agents')
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        setAgents(data)
+      } else {
+        setAgents([])
+      }
+    } catch (error) {
+      console.error('Error fetching agents:', error)
+      setAgents([])
+    }
   }
 
-  const handleStartEdit = (rowId: string, field: string, currentValue: any) => {
-    setEditingCell({ rowId, field })
-    setEditValues({ [field]: currentValue })
+  const toggleRow = (id: string, e?: MouseEvent) => {
+    if (e) {
+      e.stopPropagation()
+    }
+    const newExpanded = new Set(expandedRows)
+    if (newExpanded.has(id)) {
+      newExpanded.delete(id)
+    } else {
+      newExpanded.add(id)
+    }
+    setExpandedRows(newExpanded)
   }
 
-  const handleCancelEdit = () => {
-    setEditingCell(null)
-    setEditValues({})
+  const navigateToPlayer = (playerId: string) => {
+    router.push(`/players/${playerId}`)
   }
 
-  const handleSaveEdit = async (rowId: string) => {
-    if (!editingCell) return
+  const renderEditableField = (label: string, value: any, player: PlayerWithRelations, field: string) => {
+    return (
+      <div>
+        <p className="text-muted-foreground mb-1">{label}</p>
+        <div className="flex items-center gap-2 group">
+          <p className="font-medium">{value || '-'}</p>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="opacity-70 hover:opacity-100 h-6 w-6 p-0"
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              handleStartEdit(player, field, value, e)
+            }}
+            onMouseDown={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+          >
+            <Pencil className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const handleStartEdit = (player: PlayerWithRelations, field: string, currentValue: any, e?: MouseEvent) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    setEditingPlayer(player)
+    setEditingField(field)
+    setDialogEditValue(currentValue ?? '')
+    setEditDialogOpen(true)
+  }
+
+  const handleSaveDialogEdit = async () => {
+    if (!editingPlayer || !editingField) return
+
+    // Prevent editing playerID - it's auto-assigned and read-only
+    if (editingField === 'playerID') {
+      alert('Player ID cannot be edited. It is automatically assigned.')
+      setEditDialogOpen(false)
+      return
+    }
     
     setSaving(true)
     try {
-      const updateData: any = {}
-      Object.keys(editValues).forEach(key => {
-        if (editValues[key] !== undefined) {
-          updateData[key] = editValues[key]
-        }
-      })
-
-      const res = await fetch(`/api/players/${rowId}`, {
+      const updateData: any = { [editingField]: dialogEditValue || null }
+      
+      const res = await fetch(`/api/players/${editingPlayer.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updateData),
       })
 
       if (!res.ok) {
-        throw new Error('Failed to update player')
+        const errorText = await res.text()
+        let error
+        try {
+          error = JSON.parse(errorText)
+        } catch {
+          error = { error: errorText || `HTTP ${res.status}: ${res.statusText}` }
+        }
+        console.error('API Error:', {
+          status: res.status,
+          statusText: res.statusText,
+          url: `/api/players/${editingPlayer.id}`,
+          error,
+        })
+        alert(`Error: ${error.error || 'Failed to update player'} (Status: ${res.status})`)
+        return
       }
 
       await fetchPlayers()
-      setEditingCell(null)
-      setEditValues({})
-    } catch (error) {
+      setEditDialogOpen(false)
+      setEditingPlayer(null)
+      setEditingField('')
+      setDialogEditValue('')
+    } catch (error: any) {
       console.error('Error saving edit:', error)
-      alert('Failed to save changes')
+      alert('Failed to save changes. Please try again.')
     } finally {
       setSaving(false)
     }
   }
 
-  const columns = [
-    columnHelper.accessor('telegramHandle', {
-      header: 'Telegram',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'telegramHandle'
-        const value = info.getValue()
-
-        if (isEditing) {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                value={editValues.telegramHandle ?? value}
-                onChange={(e) => setEditValues({ ...editValues, telegramHandle: e.target.value })}
-                className="h-8"
-                autoFocus
-              />
-              <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2 group">
-            <Link href={`/players/${rowId}`} className="hover:underline">
-              {value}
-            </Link>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-              onClick={() => handleStartEdit(rowId, 'telegramHandle', value)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-    columnHelper.accessor('ginzaUsername', {
-      header: 'Ginza Username',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'ginzaUsername'
-        const value = info.getValue() || ''
-
-        if (isEditing) {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                value={editValues.ginzaUsername ?? value}
-                onChange={(e) => setEditValues({ ...editValues, ginzaUsername: e.target.value || null })}
-                className="h-8"
-                autoFocus
-              />
-              <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2 group">
-            <span>{value || '-'}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-              onClick={() => handleStartEdit(rowId, 'ginzaUsername', value)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-    columnHelper.accessor('playerType', {
-      header: 'Type',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'playerType'
-        const type = info.getValue() || 'PLAYER'
-        const colors: Record<string, string> = {
-          PLAYER: 'bg-blue-500',
-          RUNNER: 'bg-green-500',
-          AGENT: 'bg-purple-500',
-        }
-
-        if (isEditing) {
-          return (
-            <div className="flex items-center gap-2">
-              <Select
-                value={editValues.playerType ?? type}
-                onValueChange={(val) => setEditValues({ ...editValues, playerType: val })}
-              >
-                <SelectTrigger className="h-8 w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PLAYER">Player</SelectItem>
-                  <SelectItem value="RUNNER">Runner</SelectItem>
-                  <SelectItem value="AGENT">Agent</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2 group">
-            <Badge className={colors[type] || 'bg-gray-500'}>
-              {type}
-            </Badge>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-              onClick={() => handleStartEdit(rowId, 'playerType', type)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-    columnHelper.accessor('status', {
-      header: 'Status',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'status'
-        const value = info.getValue()
-
-        if (isEditing) {
-          return (
-            <div className="flex items-center gap-2">
-              <Select
-                value={editValues.status ?? value}
-                onValueChange={(val) => setEditValues({ ...editValues, status: val })}
-              >
-                <SelectTrigger className="h-8 w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ACTIVE">Active</SelectItem>
-                  <SelectItem value="FADING">Fading</SelectItem>
-                  <SelectItem value="CHURNED">Churned</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2 group">
-            <Badge variant={value === 'ACTIVE' ? 'default' : 'secondary'}>{value}</Badge>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-              onClick={() => handleStartEdit(rowId, 'status', value)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-    columnHelper.accessor('churnRisk', {
-      header: 'Churn Risk',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'churnRisk'
-        const risk = info.getValue()
-
-        if (isEditing) {
-          return (
-            <div className="flex items-center gap-2">
-              <Select
-                value={editValues.churnRisk ?? risk}
-                onValueChange={(val) => setEditValues({ ...editValues, churnRisk: val })}
-              >
-                <SelectTrigger className="h-8 w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LOW">Low</SelectItem>
-                  <SelectItem value="MED">Medium</SelectItem>
-                  <SelectItem value="HIGH">High</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2 group">
-            <Badge variant={risk === 'HIGH' ? 'destructive' : risk === 'MED' ? 'secondary' : 'default'}>
-              {risk}
-            </Badge>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-              onClick={() => handleStartEdit(rowId, 'churnRisk', risk)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-    columnHelper.accessor('skillLevel', {
-      header: 'Skill Level',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'skillLevel'
-        const level = info.getValue() || 'AMATEUR'
-        const colors: Record<string, string> = {
-          WHALE: 'bg-purple-500',
-          PRO: 'bg-blue-500',
-          NIT: 'bg-green-500',
-          AMATEUR: 'bg-yellow-500',
-          PUNTER: 'bg-gray-500',
-        }
-
-        if (isEditing) {
-          return (
-            <div className="flex items-center gap-2">
-              <Select
-                value={editValues.skillLevel ?? level}
-                onValueChange={(val) => setEditValues({ ...editValues, skillLevel: val })}
-              >
-                <SelectTrigger className="h-8 w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="WHALE">Whale</SelectItem>
-                  <SelectItem value="PRO">Pro</SelectItem>
-                  <SelectItem value="NIT">Nit</SelectItem>
-                  <SelectItem value="AMATEUR">Amateur</SelectItem>
-                  <SelectItem value="PUNTER">Punter</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2 group">
-            <Badge className={colors[level] || 'bg-gray-500'}>
-              {level}
-            </Badge>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-              onClick={() => handleStartEdit(rowId, 'skillLevel', level)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-    columnHelper.accessor('country', {
-      header: 'Country',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'country'
-        const value = info.getValue() || ''
-
-        if (isEditing) {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                value={editValues.country ?? value}
-                onChange={(e) => setEditValues({ ...editValues, country: e.target.value || null })}
-                className="h-8"
-                autoFocus
-              />
-              <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2 group">
-            <span>{value || '-'}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-              onClick={() => handleStartEdit(rowId, 'country', value)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-    columnHelper.accessor('lastActiveAt', {
-      header: 'Last Active',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'lastActiveAt'
-        const date = info.getValue()
-        const dateStr = date ? new Date(date).toISOString().split('T')[0] : ''
-
-        if (isEditing) {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                type="datetime-local"
-                value={editValues.lastActiveAt ?? (date ? new Date(date).toISOString().slice(0, 16) : '')}
-                onChange={(e) => setEditValues({ ...editValues, lastActiveAt: e.target.value ? new Date(e.target.value).toISOString() : null })}
-                className="h-8"
-                autoFocus
-              />
-              <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2 group">
-            <span className="text-sm">
-              {date 
-                ? `${new Date(date).toLocaleDateString()} ${new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                : 'Never'}
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-              onClick={() => handleStartEdit(rowId, 'lastActiveAt', date)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-    columnHelper.display({
-      id: 'mostActiveTimes',
-      header: 'Most Active Times (EST)',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'mostActiveTimes'
-        const times = info.row.original.mostActiveTimes || '-'
-
-        if (isEditing) {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                value={editValues.mostActiveTimes ?? times}
-                onChange={(e) => setEditValues({ ...editValues, mostActiveTimes: e.target.value })}
-                className="h-8 min-w-[200px]"
-                placeholder="e.g., 2pm-4pm, 6pm-8pm"
-                autoFocus
-              />
-              <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2 group">
-            <span className="text-sm">{times}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-              onClick={() => handleStartEdit(rowId, 'mostActiveTimes', times)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-    columnHelper.display({
-      id: 'totalPlaytime',
-      header: 'Total Playtime',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'totalPlaytime'
-        const minutes = info.row.original.totalPlaytime || 0
-
-        if (isEditing) {
-          return (
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                value={editValues.totalPlaytime ?? minutes}
-                onChange={(e) => setEditValues({ ...editValues, totalPlaytime: parseInt(e.target.value) || 0 })}
-                className="h-8 w-24"
-                placeholder="Minutes"
-                autoFocus
-              />
-              <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2 group">
-            <span className="text-sm">{formatMinutes(minutes)}</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-              onClick={() => handleStartEdit(rowId, 'totalPlaytime', minutes)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-    columnHelper.accessor('assignedRunner', {
-      header: 'Runner',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'assignedRunnerId'
-        const runner = info.getValue()
-        const currentRunnerId = runner?.id || ''
-
-        if (isEditing) {
-          return (
-            <div className="flex items-center gap-2">
-              <Select
-                value={editValues.assignedRunnerId ?? currentRunnerId}
-                onValueChange={(val) => setEditValues({ ...editValues, assignedRunnerId: val === 'none' ? null : val })}
-              >
-                <SelectTrigger className="h-8 w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {runners.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2 group">
-            {runner ? (
-              <Link href={`/runners/${runner.id}`} className="hover:underline">
-                {runner.name}
-              </Link>
-            ) : (
-              <span>-</span>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-              onClick={() => handleStartEdit(rowId, 'assignedRunnerId', currentRunnerId)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-    columnHelper.accessor('referredByAgent', {
-      header: 'Agent',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'referredByAgentId'
-        const agent = info.getValue()
-        const currentAgentId = agent?.id || ''
-
-        if (isEditing) {
-          return (
-            <div className="flex items-center gap-2">
-              <Select
-                value={editValues.referredByAgentId ?? currentAgentId}
-                onValueChange={(val) => setEditValues({ ...editValues, referredByAgentId: val === 'none' ? null : val })}
-              >
-                <SelectTrigger className="h-8 w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {agents.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                <Check className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-center gap-2 group">
-            {agent ? (
-              <Link href={`/agents/${agent.id}`} className="hover:underline">
-                {agent.name}
-              </Link>
-            ) : (
-              <span>-</span>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-              onClick={() => handleStartEdit(rowId, 'referredByAgentId', currentAgentId)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-    columnHelper.accessor('notes', {
-      header: 'Notes',
-      cell: (info) => {
-        const rowId = info.row.original.id
-        const isEditing = editingCell?.rowId === rowId && editingCell?.field === 'notes'
-        const value = info.getValue() || ''
-
-        if (isEditing) {
-          return (
-            <div className="flex items-start gap-2">
-              <Textarea
-                value={editValues.notes ?? value}
-                onChange={(e) => setEditValues({ ...editValues, notes: e.target.value || null })}
-                className="h-20 min-w-[200px]"
-                placeholder="Enter notes..."
-                autoFocus
-              />
-              <div className="flex flex-col gap-1">
-                <Button size="sm" variant="ghost" onClick={() => handleSaveEdit(rowId)} disabled={saving}>
-                  <Check className="h-4 w-4" />
-                </Button>
-                <Button size="sm" variant="ghost" onClick={handleCancelEdit}>
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )
-        }
-
-        return (
-          <div className="flex items-start gap-2 group">
-            <span className="text-sm max-w-[300px] truncate" title={value || undefined}>
-              {value || '-'}
-            </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0 mt-1"
-              onClick={() => handleStartEdit(rowId, 'notes', value)}
-            >
-              <Pencil className="h-3 w-3" />
-            </Button>
-          </div>
-        )
-      },
-    }),
-  ]
-
-  const table = useReactTable({
-    data: players,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    onSortingChange: setSorting,
-    state: { sorting },
-  })
 
   if (loading) {
-    return <div>Loading...</div>
+    return <div className="p-8 text-center">Loading...</div>
   }
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <Input
-          placeholder="Search telegram/wallet..."
-          value={filters.search}
-          onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-        />
-            <Select value={filters.playerType || "all"} onValueChange={(val) => setFilters({ ...filters, playerType: val === "all" ? "" : val })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="PLAYER">Player</SelectItem>
-                <SelectItem value="RUNNER">Runner</SelectItem>
-                <SelectItem value="AGENT">Agent</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filters.status || "all"} onValueChange={(val) => setFilters({ ...filters, status: val === "all" ? "" : val })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="ACTIVE">Active</SelectItem>
-                <SelectItem value="FADING">Fading</SelectItem>
-                <SelectItem value="CHURNED">Churned</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filters.churnRisk || "all"} onValueChange={(val) => setFilters({ ...filters, churnRisk: val === "all" ? "" : val })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Churn Risk" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Risks</SelectItem>
-                <SelectItem value="LOW">Low</SelectItem>
-                <SelectItem value="MED">Medium</SelectItem>
-                <SelectItem value="HIGH">High</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filters.assignedRunnerId || "all"} onValueChange={(val) => setFilters({ ...filters, assignedRunnerId: val === "all" ? "" : val })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Runner" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Runners</SelectItem>
-                {runners.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filters.referredByAgentId || "all"} onValueChange={(val) => setFilters({ ...filters, referredByAgentId: val === "all" ? "" : val })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Agent" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Agents</SelectItem>
-                {agents.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-      </div>
-
-      {/* Table */}
-      <div className="border rounded-lg overflow-x-auto">
-        <table className="w-full min-w-[1400px]">
-          <thead>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b">
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    className="px-4 py-2 text-left font-medium cursor-pointer hover:bg-muted"
-                    onClick={header.column.getToggleSortingHandler()}
+      {/* Players Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>All Players</CardTitle>
+          <CardDescription>
+            Click on a row to view player details, or use the buttons to toggle quick view / view
+            full page
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left p-3 font-medium">Player ID</th>
+                  <th className="text-left p-3 font-medium">Player</th>
+                  <th className="text-left p-3 font-medium">Status</th>
+                  <th 
+                    className="text-left p-3 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (sortBy === 'totalPlaytime') {
+                        setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')
+                      } else {
+                        setSortBy('totalPlaytime')
+                        setSortOrder('desc')
+                      }
+                    }}
                   >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                    {header.column.getIsSorted() && (
-                      <span className="ml-2">
-                        {header.column.getIsSorted() === 'asc' ? '↑' : '↓'}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      Total Playtime
+                      {sortBy === 'totalPlaytime' && (
+                        <span className="text-xs">
+                          {sortOrder === 'desc' ? '↓' : '↑'}
+                        </span>
+                      )}
+                    </div>
                   </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="border-b hover:bg-muted/50">
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-2">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  <th 
+                    className="text-left p-3 font-medium cursor-pointer hover:bg-muted/50 select-none"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (sortBy === 'lastActiveAt') {
+                        setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')
+                      } else {
+                        setSortBy('lastActiveAt')
+                        setSortOrder('desc')
+                      }
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      Last Active
+                      {sortBy === 'lastActiveAt' && (
+                        <span className="text-xs">
+                          {sortOrder === 'desc' ? '↓' : '↑'}
+                        </span>
+                      )}
+                    </div>
+                  </th>
+                  <th className="text-left p-3 font-medium">Actions</th>
+                </tr>
+                <tr className="border-b bg-muted/30">
+                  <td className="p-2">
+                    <Input
+                      placeholder="Filter ID..."
+                      value={columnFilters.playerID}
+                      onChange={(e) => {
+                        e.stopPropagation()
+                        setColumnFilters({ ...columnFilters, playerID: e.target.value })
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      className="h-8 text-xs"
+                    />
                   </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {players.length === 0 && (
-          <div className="p-8 text-center text-muted-foreground">No players found</div>
-        )}
-      </div>
+                  <td className="p-2">
+                    <Input
+                      placeholder="Filter name..."
+                      value={columnFilters.playerName}
+                      onChange={(e) => {
+                        e.stopPropagation()
+                        setColumnFilters({ ...columnFilters, playerName: e.target.value })
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      className="h-8 text-xs"
+                    />
+                  </td>
+                  <td className="p-2">
+                    <Select
+                      value={columnFilters.status || 'all'}
+                      onValueChange={(val) => {
+                        setColumnFilters({ ...columnFilters, status: val === 'all' ? '' : val })
+                      }}
+                    >
+                      <SelectTrigger 
+                        className="h-8 text-xs" 
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <SelectValue placeholder="All Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Status</SelectItem>
+                        <SelectItem value="ACTIVE">Active</SelectItem>
+                        <SelectItem value="FADING">Fading</SelectItem>
+                        <SelectItem value="CHURNED">Churned</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="p-2">
+                    <Select
+                      value={columnFilters.totalPlaytime || 'all'}
+                      onValueChange={(val) => {
+                        setColumnFilters({ ...columnFilters, totalPlaytime: val === 'all' ? '' : val })
+                      }}
+                    >
+                      <SelectTrigger 
+                        className="h-8 text-xs" 
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <SelectValue placeholder="All Playtime" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Playtime</SelectItem>
+                        <SelectItem value="most">Most Playtime (Top 20)</SelectItem>
+                        <SelectItem value="high">High (1000+ min)</SelectItem>
+                        <SelectItem value="medium">Medium (500-999 min)</SelectItem>
+                        <SelectItem value="low">Low (&lt;500 min)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="p-2">
+                    <Select
+                      value={columnFilters.lastActive || 'all'}
+                      onValueChange={(val) => {
+                        setColumnFilters({ ...columnFilters, lastActive: val === 'all' ? '' : val })
+                      }}
+                    >
+                      <SelectTrigger 
+                        className="h-8 text-xs" 
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <SelectValue placeholder="All Time" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Time</SelectItem>
+                        <SelectItem value="1">Last 24 hours</SelectItem>
+                        <SelectItem value="7">Last 7 days</SelectItem>
+                        <SelectItem value="30">Last 30 days</SelectItem>
+                        <SelectItem value="90">Last 90 days</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="p-2"></td>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedAndFilteredPlayers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                      No players found
+                    </td>
+                  </tr>
+                ) : (
+                  sortedAndFilteredPlayers.map((player) => {
+                    const isExpanded = expandedRows.has(player.id)
+                    return (
+                      <Fragment key={player.id}>
+                        <tr
+                          className="border-b hover:bg-muted/50 cursor-pointer transition-colors"
+                          onClick={() => navigateToPlayer(player.id)}
+                        >
+                          <td className="p-3">
+                            {player.playerID || '-'}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex flex-col">
+                              <span className="font-medium">{player.telegramHandle}</span>
+                              {player.ginzaUsername && (
+                                <span className="text-xs text-muted-foreground">
+                                  {player.ginzaUsername}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex flex-wrap gap-1">
+                              <Badge
+                                className={
+                                  player.status === 'ACTIVE'
+                                    ? 'bg-green-500'
+                                    : player.status === 'FADING'
+                                    ? 'bg-yellow-500'
+                                    : 'bg-red-500'
+                                }
+                              >
+                                {player.status}
+                              </Badge>
+                              {player.isRunner && (
+                                <Badge className="bg-green-500 text-white">Runner</Badge>
+                              )}
+                              {player.isAgent && (
+                                <Badge className="bg-purple-500 text-white">Host</Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3">{formatMinutes(player.totalPlaytime || 0)}</td>
+                          <td className="p-3 text-sm">
+                            {player.lastActiveAt
+                              ? new Date(player.lastActiveAt).toLocaleString()
+                              : '-'}
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => toggleRow(player.id, e)}
+                                title="Toggle quick details"
+                              >
+                                {isExpanded ? (
+                                  <ChevronUp className="h-4 w-4" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4" />
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  navigateToPlayer(player.id)
+                                }}
+                                title="View full details"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                            <tr 
+                              key={`${player.id}-details`} 
+                              className="bg-muted/30"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <td 
+                                colSpan={6} 
+                                className="p-4"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div 
+                                  className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div>
+                                    <p className="text-muted-foreground mb-1">Telegram Handle</p>
+                                    <div className="flex items-center gap-2 group">
+                                      <p className="font-medium">{player.telegramHandle || '-'}</p>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="opacity-70 hover:opacity-100 h-6 w-6 p-0"
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          handleStartEdit(player, 'telegramHandle', player.telegramHandle, e)
+                                        }}
+                                        onMouseDown={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                        }}
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground mb-1">Ginza Username</p>
+                                    <div className="flex items-center gap-2 group">
+                                      <p className="font-medium">{player.ginzaUsername || '-'}</p>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="opacity-70 hover:opacity-100 h-6 w-6 p-0"
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          handleStartEdit(player, 'ginzaUsername', player.ginzaUsername, e)
+                                        }}
+                                        onMouseDown={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                        }}
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground mb-1">Country</p>
+                                    <div className="flex items-center gap-2 group">
+                                      <p className="font-medium">{player.country || '-'}</p>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="opacity-70 hover:opacity-100 h-6 w-6 p-0"
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          handleStartEdit(player, 'country', player.country, e)
+                                        }}
+                                        onMouseDown={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                        }}
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  {renderEditableField('Skill Level', player.skillLevel, player, 'skillLevel')}
+                                  {renderEditableField('Churn Risk', player.churnRisk, player, 'churnRisk')}
+                                  {renderEditableField('VIP Tier', player.vipTier, player, 'vipTier')}
+                                  <div>
+                                    <p className="text-muted-foreground mb-1">Status</p>
+                                    <div className="flex items-center gap-2 group">
+                                      <Badge
+                                        className={
+                                          player.status === 'ACTIVE'
+                                            ? 'bg-green-500'
+                                            : player.status === 'FADING'
+                                            ? 'bg-yellow-500'
+                                            : 'bg-red-500'
+                                        }
+                                      >
+                                        {player.status}
+                                      </Badge>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="opacity-70 hover:opacity-100 h-6 w-6 p-0"
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          handleStartEdit(player, 'status', player.status, e)
+                                        }}
+                                        onMouseDown={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                        }}
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground mb-1">Is Host</p>
+                                    <div className="flex items-center gap-2 group">
+                                      <Select
+                                        value={player.isAgent ? 'yes' : 'no'}
+                                        onValueChange={async (value) => {
+                                          const checked = value === 'yes'
+                                          try {
+                                            const res = await fetch(`/api/players/${player.id}`, {
+                                              method: 'PATCH',
+                                              headers: { 'Content-Type': 'application/json' },
+                                              body: JSON.stringify({ isAgent: checked }),
+                                            })
+                                            if (res.ok) {
+                                              await fetchPlayers()
+                                              await fetchAgents() // Refresh hosts list
+                                            } else {
+                                              const errorText = await res.text()
+                                              console.error('Failed to update isAgent:', {
+                                                status: res.status,
+                                                statusText: res.statusText,
+                                                error: errorText,
+                                              })
+                                              alert(`Failed to update host status (Status: ${res.status})`)
+                                            }
+                                          } catch (error) {
+                                            console.error('Error updating isAgent:', error)
+                                            alert('Failed to update host status')
+                                          }
+                                        }}
+                                      >
+                                        <SelectTrigger className="w-20">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="yes">Yes</SelectItem>
+                                          <SelectItem value="no">No</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-muted-foreground mb-1">Most Active Times (EST)</p>
+                                    <p className="font-medium">{player.mostActiveTimes || '-'}</p>
+                                  </div>
+                                  <div className="col-span-2 md:col-span-4">
+                                    <p className="text-muted-foreground mb-1">Notes</p>
+                                    <div className="flex items-start gap-2 group">
+                                      <p className="font-medium flex-1">{player.notes || '-'}</p>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="opacity-70 hover:opacity-100 h-6 w-6 p-0"
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          handleStartEdit(player, 'notes', player.notes, e)
+                                        }}
+                                        onMouseDown={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                        }}
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                      </Fragment>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit {editingField}</DialogTitle>
+            <DialogDescription>
+              Update {editingField} for {editingPlayer?.telegramHandle}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {editingField === 'skillLevel' ? (
+              <div className="space-y-2">
+                <Label>Skill Level</Label>
+                <Select value={dialogEditValue} onValueChange={setDialogEditValue}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AMATEUR">AMATEUR</SelectItem>
+                    <SelectItem value="INTERMEDIATE">INTERMEDIATE</SelectItem>
+                    <SelectItem value="ADVANCED">ADVANCED</SelectItem>
+                    <SelectItem value="PROFESSIONAL">PROFESSIONAL</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : editingField === 'churnRisk' ? (
+              <div className="space-y-2">
+                <Label>Churn Risk</Label>
+                <Select value={dialogEditValue} onValueChange={setDialogEditValue}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LOW">LOW</SelectItem>
+                    <SelectItem value="MED">MED</SelectItem>
+                    <SelectItem value="HIGH">HIGH</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : editingField === 'vipTier' ? (
+              <div className="space-y-2">
+                <Label>VIP Tier</Label>
+                <Select value={dialogEditValue} onValueChange={setDialogEditValue}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BRONZE">BRONZE</SelectItem>
+                    <SelectItem value="SILVER">SILVER</SelectItem>
+                    <SelectItem value="GOLD">GOLD</SelectItem>
+                    <SelectItem value="PLATINUM">PLATINUM</SelectItem>
+                    <SelectItem value="DIAMOND">DIAMOND</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : editingField === 'status' ? (
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={dialogEditValue} onValueChange={setDialogEditValue}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                    <SelectItem value="FADING">FADING</SelectItem>
+                    <SelectItem value="CHURNED">CHURNED</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : editingField === 'notes' ? (
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={dialogEditValue || ''}
+                  onChange={(e) => setDialogEditValue(e.target.value)}
+                  maxLength={40}
+                  className="min-h-20"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>{editingField}</Label>
+                <Input
+                  value={dialogEditValue || ''}
+                  onChange={(e) => setDialogEditValue(e.target.value)}
+                  maxLength={40}
+                  autoFocus
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveDialogEdit} disabled={saving}>
+              {saving ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-

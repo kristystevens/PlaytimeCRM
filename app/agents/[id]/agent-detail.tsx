@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 
-// Accept any agent type - we'll handle the optional player field safely
+// Accept any host type - we'll handle the optional player field safely
 export default function AgentDetail({ agent }: { agent: any }) {
   const router = useRouter()
 
@@ -15,10 +15,10 @@ export default function AgentDetail({ agent }: { agent: any }) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">{agent.name}</h1>
-          <p className="text-muted-foreground">Agent Details</p>
+          <p className="text-muted-foreground">Host Details</p>
         </div>
         <Button variant="outline" onClick={() => router.push('/agents')}>
-          Back to Agents
+          Back to Hosts
         </Button>
       </div>
 
@@ -40,7 +40,12 @@ export default function AgentDetail({ agent }: { agent: any }) {
             )}
             <div>
               <div className="text-sm text-muted-foreground">Status</div>
-              <Badge variant={agent.status === 'ACTIVE' ? 'default' : agent.status === 'INACTIVE' ? 'destructive' : 'secondary'}>
+              <Badge variant={
+                agent.status === 'ACTIVE' ? 'default' : 
+                agent.status === 'INACTIVE' ? 'destructive' : 
+                agent.status === 'APPROACHING' ? 'secondary' : 
+                'secondary'
+              }>
                 {agent.status}
               </Badge>
             </div>
@@ -98,11 +103,11 @@ export default function AgentDetail({ agent }: { agent: any }) {
 
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Referred Players ({agent.referredPlayers.length})</CardTitle>
+            <CardTitle>Referred Players ({Array.isArray(agent.referredPlayers) ? agent.referredPlayers.length : 0})</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {agent.referredPlayers.map((player: any) => (
+              {Array.isArray(agent.referredPlayers) && agent.referredPlayers.map((player: any) => (
                 <div key={player.id} className="flex items-center justify-between p-2 border rounded">
                   <Link href={`/players/${player.id}`} className="hover:underline">
                     {player.telegramHandle}
@@ -112,7 +117,7 @@ export default function AgentDetail({ agent }: { agent: any }) {
                   </div>
                 </div>
               ))}
-              {agent.referredPlayers.length === 0 && (
+              {(!Array.isArray(agent.referredPlayers) || agent.referredPlayers.length === 0) && (
                 <div className="text-sm text-muted-foreground">No referred players</div>
               )}
             </div>
@@ -125,7 +130,7 @@ export default function AgentDetail({ agent }: { agent: any }) {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {agent.payouts.map((payout: any) => (
+              {Array.isArray(agent.payouts) && agent.payouts.map((payout: any) => (
                 <div key={payout.id} className="flex items-center justify-between p-2 border rounded">
                   <div>
                     <div className="font-medium">${Number(payout.amount).toLocaleString()}</div>
@@ -138,7 +143,7 @@ export default function AgentDetail({ agent }: { agent: any }) {
                   </Badge>
                 </div>
               ))}
-              {agent.payouts.length === 0 && (
+              {(!Array.isArray(agent.payouts) || agent.payouts.length === 0) && (
                 <div className="text-sm text-muted-foreground">No payouts yet</div>
               )}
             </div>
