@@ -68,7 +68,7 @@ async function main() {
   console.log('Created agents')
 
   // Create players
-  const countries = ['USA', 'UK', 'Canada', 'Australia', 'Germany', 'France', 'Japan', 'Brazil', 'Mexico', 'Spain']
+  const timeZones = ['EST', 'PST', 'UTC', 'CST', 'MST', 'EST', 'PST', 'UTC', 'EST', 'PST']
   const vipTiers: string[] = ['HIGH', 'MEDIUM', 'LOW', 'HIGH', 'MEDIUM', 'LOW', 'HIGH', 'MEDIUM', 'LOW', 'MEDIUM']
   const playerStatuses: string[] = ['ACTIVE', 'ACTIVE', 'FADING', 'ACTIVE', 'CHURNED', 'ACTIVE', 'FADING', 'ACTIVE', 'ACTIVE', 'ACTIVE']
   const churnRisks: string[] = ['LOW', 'LOW', 'MED', 'LOW', 'HIGH', 'LOW', 'MED', 'LOW', 'LOW', 'LOW']
@@ -98,7 +98,7 @@ async function main() {
       data: {
         telegramHandle: `player_${i + 1}`,
         walletAddress: i % 3 === 0 ? `0x${Math.random().toString(16).substring(2, 42)}` : null,
-        country: countries[i % countries.length],
+        preferredTimeZones: JSON.stringify([timeZones[i % timeZones.length]]),
         vipTier,
         status,
         churnRisk,
