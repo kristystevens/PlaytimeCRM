@@ -3,6 +3,9 @@ import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import RunnerDetail from './runner-detail'
 
+// Force dynamic rendering to avoid build-time database connection issues
+export const dynamic = 'force-dynamic'
+
 async function getRunner(id: string) {
   const runner = await prisma.runner.findUnique({
     where: { id },

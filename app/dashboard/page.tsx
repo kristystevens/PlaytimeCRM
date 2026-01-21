@@ -8,6 +8,9 @@ import DashboardTable from './dashboard-table'
 import { parse, format, addHours } from 'date-fns'
 import QuickGameEntryCard from './quick-game-entry-card'
 
+// Force dynamic rendering to avoid build-time database connection issues
+export const dynamic = 'force-dynamic'
+
 // Round time to nearest hour
 function roundToNearestHour(time: string): string {
   try {
