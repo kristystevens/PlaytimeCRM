@@ -39,3 +39,9 @@ next-env.d.ts
 # prisma
 /prisma/migrations
 
+# data exports (may contain sensitive data)
+scripts/sqlite-export.json
+
+
+.vercel
+.env*.local
