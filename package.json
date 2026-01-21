@@ -29,7 +29,8 @@
     "export-sqlite": "tsx scripts/export-sqlite-data.ts",
     "import-postgres": "tsx scripts/import-to-postgres.ts",
     "switch-postgres": "tsx scripts/switch-to-postgres.ts",
-    "switch-sqlite": "tsx scripts/switch-to-sqlite.ts"
+    "switch-sqlite": "tsx scripts/switch-to-sqlite.ts",
+    "clone-db": "tsx scripts/clone-sqlite-to-postgres.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.0.0",
