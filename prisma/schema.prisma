@@ -1,4 +1,4 @@
-// PostgreSQL schema for production (no Docker needed!)
+// PostgreSQL schema for production (no Docker needed!) (no Docker needed!)
 // This uses PostgreSQL (Supabase/Vercel Postgres)
 
 generator client {
