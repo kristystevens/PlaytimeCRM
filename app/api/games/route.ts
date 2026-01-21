@@ -136,7 +136,7 @@ async function findOrCreatePlayer(username: string): Promise<string | null> {
   const playerID = await getNextPlayerID()
   const newPlayer = await prisma.player.create({
     data: {
-      telegramHandle: trimmedUsername, // Required field
+      telegramHandle: trimmedUsername, // Required field - must be unique
       ginzaUsername: trimmedUsername,
       playerID: playerID,
       status: 'ACTIVE',
