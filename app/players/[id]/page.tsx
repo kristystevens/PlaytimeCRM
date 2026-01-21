@@ -8,6 +8,15 @@ async function getPlayer(id: string) {
     include: {
       assignedRunner: true,
       referredByAgent: true,
+      gamePlayers: {
+        include: {
+          game: {
+            include: {
+              host: true,
+            },
+          },
+        },
+      },
     },
   })
   return player

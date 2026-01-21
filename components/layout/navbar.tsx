@@ -18,7 +18,10 @@ export function Navbar() {
               Players
             </Link>
             <Link href="/agents" className="text-sm hover:text-primary">
-              Hosts
+              Agents
+            </Link>
+            <Link href="/games" className="text-sm hover:text-primary">
+              Games
             </Link>
             <Link href="/activity" className="text-sm hover:text-primary">
               Activity

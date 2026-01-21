@@ -22,7 +22,6 @@ export default function NewRunnerPage() {
     name: '',
     telegramHandle: '',
     ginzaUsername: '',
-    country: '',
     timezone: '',
     vipTier: 'MEDIUM',
     status: 'ACTIVE',
@@ -94,14 +93,6 @@ export default function NewRunnerPage() {
                 id="ginzaUsername"
                 value={formData.ginzaUsername}
                 onChange={(e) => setFormData({ ...formData, ginzaUsername: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="country">Country</Label>
-              <Input
-                id="country"
-                value={formData.country}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
               />
             </div>
             <div className="space-y-2">

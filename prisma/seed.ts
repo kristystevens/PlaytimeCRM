@@ -102,7 +102,6 @@ async function main() {
         vipTier,
         status,
         churnRisk,
-        tiltRisk: i % 7 === 0,
         preferredGames: i % 2 === 0 ? JSON.stringify(['NLH', 'PLO']) : JSON.stringify(['NLH']),
         assignedRunnerId: i % 2 === 0 ? runners[i % runners.length].id : null,
         referredByAgentId: i % 3 === 0 ? agents[i % agents.length].id : null,

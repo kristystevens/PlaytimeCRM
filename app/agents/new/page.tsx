@@ -22,7 +22,6 @@ export default function NewAgentPage() {
     name: '',
     telegramHandle: '',
     ginzaUsername: '',
-    country: '',
     timezone: '',
     vipTier: 'MEDIUM',
     status: 'ACTIVE',
@@ -70,15 +69,16 @@ export default function NewAgentPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Ginza Username first */}
             <div className="space-y-2">
-              <Label htmlFor="name">Name *</Label>
+              <Label htmlFor="ginzaUsername">Ginza Username</Label>
               <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
+                id="ginzaUsername"
+                value={formData.ginzaUsername}
+                onChange={(e) => setFormData({ ...formData, ginzaUsername: e.target.value })}
               />
             </div>
+            {/* Telegram second */}
             <div className="space-y-2">
               <Label htmlFor="telegramHandle">Telegram Handle *</Label>
               <Input
@@ -88,20 +88,14 @@ export default function NewAgentPage() {
                 required
               />
             </div>
+            {/* Name third */}
             <div className="space-y-2">
-              <Label htmlFor="ginzaUsername">Ginza Username</Label>
+              <Label htmlFor="name">Name *</Label>
               <Input
-                id="ginzaUsername"
-                value={formData.ginzaUsername}
-                onChange={(e) => setFormData({ ...formData, ginzaUsername: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="country">Country</Label>
-              <Input
-                id="country"
-                value={formData.country}
-                onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
               />
             </div>
             <div className="space-y-2">

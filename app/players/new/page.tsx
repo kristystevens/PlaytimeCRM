@@ -21,15 +21,21 @@ export default function NewPlayerPage() {
   const [formData, setFormData] = useState({
     telegramHandle: '',
     ginzaUsername: '',
-    country: '',
+    name: '',
+    preferredTimeZones: [] as string[],
     vipTier: 'MEDIUM',
     status: 'ACTIVE',
     churnRisk: 'LOW',
     skillLevel: 'AMATEUR',
+    preferredPlaytimes: [] as string[],
     notes: '',
+    assignedCommunityManager: null as string | null,
     isRunner: false,
     isAgent: false,
   })
+  const [preferredPlaytimesInput, setPreferredPlaytimesInput] = useState('')
+  const [preferredTimeZonesInput, setPreferredTimeZonesInput] = useState('')
+  const [preferredStakesInput, setPreferredStakesInput] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,6 +48,15 @@ export default function NewPlayerPage() {
         body: JSON.stringify({
           ...formData,
           ginzaUsername: formData.ginzaUsername || null,
+          preferredPlaytimes: preferredPlaytimesInput 
+            ? preferredPlaytimesInput.split(',').map(t => t.trim()).filter(t => t)
+            : [],
+          preferredTimeZones: preferredTimeZonesInput 
+            ? preferredTimeZonesInput.split(',').map(t => t.trim()).filter(t => t)
+            : [],
+          preferredStakes: preferredStakesInput 
+            ? preferredStakesInput.split(',').map(t => t.trim()).filter(t => t)
+            : [],
         }),
       })
 
@@ -78,6 +93,15 @@ export default function NewPlayerPage() {
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                maxLength={100}
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="ginzaUsername">Ginza Username</Label>
               <Input
                 id="ginzaUsername"
@@ -87,13 +111,15 @@ export default function NewPlayerPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="country">Country</Label>
+              <Label htmlFor="preferredTimeZones">Preferred Time Zones</Label>
               <Input
-                id="country"
-                value={formData.country}
-                onChange={(e) => setFormData(prev => ({ ...prev, country: e.target.value }))}
-                maxLength={40}
+                id="preferredTimeZones"
+                value={preferredTimeZonesInput}
+                onChange={(e) => setPreferredTimeZonesInput(e.target.value)}
+                placeholder="e.g., EST, PST, UTC"
+                maxLength={200}
               />
+              <p className="text-xs text-muted-foreground">Enter comma-separated time zones (e.g., EST, PST, UTC)</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -138,7 +164,7 @@ export default function NewPlayerPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="skillLevel">Skill Level</Label>
+                <Label htmlFor="skillLevel">Player Type</Label>
                 <Select value={formData.skillLevel} onValueChange={(val) => setFormData(prev => ({ ...prev, skillLevel: val }))}>
                   <SelectTrigger>
                     <SelectValue />
@@ -152,6 +178,47 @@ export default function NewPlayerPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="preferredPlaytimes">Preferred Playtimes</Label>
+              <Input
+                id="preferredPlaytimes"
+                value={preferredPlaytimesInput}
+                onChange={(e) => setPreferredPlaytimesInput(e.target.value)}
+                placeholder="e.g., 7pm-9pm, 5am-7am"
+                maxLength={200}
+              />
+              <p className="text-xs text-muted-foreground">Enter comma-separated time ranges (e.g., 7pm-9pm, 5am-7am)</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="preferredStakes">Preferred Stakes</Label>
+              <Input
+                id="preferredStakes"
+                value={preferredStakesInput}
+                onChange={(e) => setPreferredStakesInput(e.target.value)}
+                placeholder="e.g., 1/2 NL, 2/5 NL"
+                maxLength={200}
+              />
+              <p className="text-xs text-muted-foreground">Enter comma-separated stakes (e.g., 1/2 NL, 2/5 NL)</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="assignedCommunityManager">Assigned Community Manager</Label>
+              <Select 
+                value={formData.assignedCommunityManager || 'none'} 
+                onValueChange={(val) => setFormData(prev => ({ ...prev, assignedCommunityManager: val === 'none' ? null : val }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select community manager" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="MIA">Mia</SelectItem>
+                  <SelectItem value="KRISTY">Kristy</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Community managers help build relationships and reduce churn. Assignments are based on who onboarded the player or alternating.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center space-x-2">

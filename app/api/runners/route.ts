@@ -81,9 +81,9 @@ export async function GET(request: NextRequest) {
     const runnersWithMetrics = runners.map((runner) => {
       // Calculate last active - most recent lastActiveAt from assigned players or runner's own player profile
       const assignedPlayersLastActive = runner.assignedPlayers
-        .map(p => p.lastActiveAt)
-        .filter(Boolean)
-        .map(d => new Date(d!))
+        .map((p: { lastActiveAt: Date | null }) => p.lastActiveAt)
+        .filter((date: Date | null): date is Date => date !== null)
+        .map((d: Date) => new Date(d))
       
       const runnerLastActive = runner.player?.lastActiveAt ? [new Date(runner.player.lastActiveAt)] : []
       
@@ -121,12 +121,8 @@ export async function POST(request: NextRequest) {
     const playerData = {
       telegramHandle: validated.telegramHandle,
       ginzaUsername: validated.ginzaUsername,
-      country: validated.country,
       isRunner: true,
-      vipTier: validated.vipTier || 'MEDIUM',
       status: validated.status || 'ACTIVE',
-      churnRisk: validated.churnRisk || 'LOW',
-      skillLevel: validated.skillLevel || 'AMATEUR',
       notes: validated.notes,
     }
 
@@ -153,8 +149,8 @@ export async function POST(request: NextRequest) {
         ginzaUsername: validated.ginzaUsername,
         playerId: player.id,
         timezone: validated.timezone,
-        languages: validated.languages || [],
-        status: validated.runnerStatus || 'TRUSTED',
+        languages: validated.languages ? JSON.stringify(validated.languages) : '[]',
+        status: validated.status || 'TRUSTED',
         bankrollAccess: validated.bankrollAccess || false,
         maxTableSize: validated.maxTableSize || 6,
         strikeCount: validated.strikeCount || 0,

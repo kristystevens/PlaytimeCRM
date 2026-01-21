@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
     const churnRisk = searchParams.get('churnRisk')
     const assignedRunnerId = searchParams.get('assignedRunnerId')
     const referredByAgentId = searchParams.get('referredByAgentId')
-    const country = searchParams.get('country')
+    const preferredTimeZones = searchParams.get('preferredTimeZones')
     const search = searchParams.get('search')
     const sortBy = searchParams.get('sortBy') || 'totalDeposited'
     const sortOrder = searchParams.get('sortOrder') || 'desc'
@@ -115,7 +115,11 @@ export async function GET(request: NextRequest) {
     if (churnRisk) where.churnRisk = churnRisk
     if (assignedRunnerId) where.assignedRunnerId = assignedRunnerId
     if (referredByAgentId) where.referredByAgentId = referredByAgentId
-    if (country) where.country = country
+    if (preferredTimeZones) {
+      // For time zones, we'll search in the JSON array string
+      // SQLite doesn't support contains, so we use a workaround
+      where.preferredTimeZones = { contains: preferredTimeZones } as any
+    }
     if (search) {
       where.OR = [
         { telegramHandle: { contains: search, mode: 'insensitive' } },
@@ -174,6 +178,9 @@ export async function GET(request: NextRequest) {
     // Calculate most active play times, total playtime, and last gameplay datetime
     const now = new Date()
     const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000) // 14 days ago
+    
+    // Get system user for activity logging (once, outside the loop)
+    const systemUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } })
     
     const playersWithActiveTimes = await Promise.all(players.map(async (player) => {
       // Ensure playtimeEntries is an array
@@ -237,6 +244,16 @@ export async function GET(request: NextRequest) {
               data: { status: 'FADING' },
             })
             updatedStatus = 'FADING'
+            
+            // Log the status change in activity log
+            if (systemUser) {
+              await logActivity(systemUser.id, 'PLAYER', player.id, 'UPDATE', {
+                action: 'STATUS_CHANGE',
+                from: 'ACTIVE',
+                to: 'FADING',
+                reason: 'Automatically changed to FADING - player inactive for over 2 weeks',
+              })
+            }
           } catch (error) {
             console.error(`Error updating status for player ${player.id}:`, error)
             // Continue with original status if update fails
@@ -275,11 +292,10 @@ export async function POST(request: NextRequest) {
     // Always auto-assign sequential playerID
     const playerID = await getNextPlayerID()
     
-    const player = await prisma.player.create({
-      data: {
-        telegramHandle: validated.telegramHandle,
-        ginzaUsername: validated.ginzaUsername,
-        country: validated.country,
+    const playerData: any = {
+      telegramHandle: validated.telegramHandle,
+      ginzaUsername: validated.ginzaUsername,
+      preferredTimeZones: validated.preferredTimeZones ? JSON.stringify(validated.preferredTimeZones) : '[]',
         playerType: validated.playerType || 'PLAYER',
         isRunner,
         isAgent,
@@ -288,8 +304,11 @@ export async function POST(request: NextRequest) {
         status: validated.status || 'ACTIVE',
         churnRisk: validated.churnRisk || 'LOW',
         skillLevel: validated.skillLevel || 'AMATEUR',
-        preferredGames: validated.preferredGames || [],
+        preferredGames: validated.preferredGames ? JSON.stringify(validated.preferredGames) : '[]',
+        preferredPlaytimes: validated.preferredPlaytimes ? JSON.stringify(validated.preferredPlaytimes) : '[]',
+        preferredStakes: validated.preferredStakes ? JSON.stringify(validated.preferredStakes) : '[]',
         notes: validated.notes,
+        assignedCommunityManager: validated.assignedCommunityManager,
         assignedRunnerId: validated.assignedRunnerId,
         referredByAgentId: validated.referredByAgentId,
         lastActiveAt: validated.lastActiveAt ? new Date(validated.lastActiveAt) : null,
@@ -297,7 +316,14 @@ export async function POST(request: NextRequest) {
         totalWagered: validated.totalWagered || 0,
         netPnL: validated.netPnL || 0,
         avgBuyIn: validated.avgBuyIn || 0,
-      },
+    }
+
+    if (validated.name !== undefined) {
+      (playerData as any).name = validated.name
+    }
+
+    const player = await prisma.player.create({
+      data: playerData,
       include: {
         assignedRunner: true,
         referredByAgent: true,

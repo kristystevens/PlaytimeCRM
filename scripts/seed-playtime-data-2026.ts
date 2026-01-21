@@ -134,7 +134,7 @@ async function main() {
           where: {
             OR: [
               { telegramHandle: entry.handle },
-              { telegramHandle: { contains: entry.handle, mode: 'insensitive' } },
+              { telegramHandle: { contains: entry.handle } },
             ],
           },
         })

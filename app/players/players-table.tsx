@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import Link from 'next/link'
 import { formatMinutes } from '@/lib/playtime-utils'
+import { capitalizeFirst } from '@/lib/utils'
 import { ChevronDown, ChevronUp, ExternalLink, Pencil, Check, X } from 'lucide-react'
 import { Player, Runner, Agent } from '@prisma/client'
 import { Textarea } from '@/components/ui/textarea'
@@ -68,7 +69,7 @@ export default function PlayersTableNew() {
     status: '',
     totalPlaytime: '',
     lastActive: '',
-    country: '',
+    preferredTimeZones: '',
     skillLevel: '',
     churnRisk: '',
     vipTier: '',
@@ -93,8 +94,8 @@ export default function PlayersTableNew() {
     }
     if (columnFilters.playerName) {
       result = result.filter(p => 
-        (p.telegramHandle || '').toLowerCase().includes(columnFilters.playerName.toLowerCase()) ||
-        (p.ginzaUsername || '').toLowerCase().includes(columnFilters.playerName.toLowerCase())
+        (p.ginzaUsername || '').toLowerCase().includes(columnFilters.playerName.toLowerCase()) ||
+        (p.telegramHandle || '').toLowerCase().includes(columnFilters.playerName.toLowerCase())
       )
     }
     if (columnFilters.status) {
@@ -130,10 +131,16 @@ export default function PlayersTableNew() {
         })
       }
     }
-    if (columnFilters.country) {
-      result = result.filter(p => 
-        (p.country || '').toLowerCase().includes(columnFilters.country.toLowerCase())
-      )
+    if (columnFilters.preferredTimeZones) {
+      result = result.filter(p => {
+        try {
+          const timeZones = JSON.parse((p as any).preferredTimeZones || '[]')
+          const timeZonesStr = Array.isArray(timeZones) ? timeZones.join(', ') : ''
+          return timeZonesStr.toLowerCase().includes(columnFilters.preferredTimeZones.toLowerCase())
+        } catch {
+          return false
+        }
+      })
     }
     if (columnFilters.skillLevel) {
       result = result.filter(p => p.skillLevel === columnFilters.skillLevel)
@@ -174,7 +181,9 @@ export default function PlayersTableNew() {
           return diff
         }
         // If playtime is equal, sort by name for consistency
-        return (a.telegramHandle || '').localeCompare(b.telegramHandle || '')
+        return (a.ginzaUsername || a.telegramHandle || '').localeCompare(
+          b.ginzaUsername || b.telegramHandle || '',
+        )
       })
       
       // If user wants ascending, reverse it
@@ -205,6 +214,7 @@ export default function PlayersTableNew() {
           error: errorText,
         })
         setPlayers([])
+        setLoading(false)
         return
       }
       const data = await res.json()
@@ -219,7 +229,9 @@ export default function PlayersTableNew() {
             return diff
           }
           // If playtime is equal, sort by name for consistency
-          return (a.telegramHandle || '').localeCompare(b.telegramHandle || '')
+          return (a.ginzaUsername || a.telegramHandle || '').localeCompare(
+            b.ginzaUsername || b.telegramHandle || '',
+          )
         })
         
         // Verify sorting worked - log first few players
@@ -249,6 +261,7 @@ export default function PlayersTableNew() {
     } catch (error) {
       console.error('Error fetching players:', error)
       setPlayers([])
+      alert('Failed to load players. Please check your database connection and try refreshing the page.')
     } finally {
       setLoading(false)
     }
@@ -335,7 +348,18 @@ export default function PlayersTableNew() {
     }
     setEditingPlayer(player)
     setEditingField(field)
-    setDialogEditValue(currentValue ?? '')
+    
+    // Parse preferredTimeZones from JSON array to comma-separated string
+    if (field === 'preferredTimeZones') {
+      try {
+        const parsed = JSON.parse((player as any).preferredTimeZones || '[]')
+        setDialogEditValue(Array.isArray(parsed) ? parsed.join(', ') : '')
+      } catch {
+        setDialogEditValue('')
+      }
+    } else {
+      setDialogEditValue(currentValue ?? '')
+    }
     setEditDialogOpen(true)
   }
 
@@ -351,7 +375,16 @@ export default function PlayersTableNew() {
     
     setSaving(true)
     try {
-      const updateData: any = { [editingField]: dialogEditValue || null }
+      const updateData: any = {}
+      
+      // Convert preferredTimeZones from comma-separated string to JSON array
+      if (editingField === 'preferredTimeZones') {
+        updateData[editingField] = dialogEditValue
+          ? dialogEditValue.split(',').map((t: string) => t.trim()).filter((t: string) => t)
+          : []
+      } else {
+        updateData[editingField] = dialogEditValue || null
+      }
       
       const res = await fetch(`/api/players/${editingPlayer.id}`, {
         method: 'PATCH',
@@ -577,10 +610,12 @@ export default function PlayersTableNew() {
                           </td>
                           <td className="p-3">
                             <div className="flex flex-col">
-                              <span className="font-medium">{player.telegramHandle}</span>
+                              <span className="font-medium">
+                                {capitalizeFirst(player.ginzaUsername) || capitalizeFirst(player.telegramHandle)}
+                              </span>
                               {player.ginzaUsername && (
                                 <span className="text-xs text-muted-foreground">
-                                  {player.ginzaUsername}
+                                  {capitalizeFirst(player.ginzaUsername)}
                                 </span>
                               )}
                             </div>
@@ -658,7 +693,9 @@ export default function PlayersTableNew() {
                                   <div>
                                     <p className="text-muted-foreground mb-1">Telegram Handle</p>
                                     <div className="flex items-center gap-2 group">
-                                      <p className="font-medium">{player.telegramHandle || '-'}</p>
+                                      <p className="font-medium">
+                                        {capitalizeFirst(player.ginzaUsername) || capitalizeFirst(player.telegramHandle) || '-'}
+                                      </p>
                                       <Button
                                         size="sm"
                                         variant="ghost"
@@ -680,7 +717,7 @@ export default function PlayersTableNew() {
                                   <div>
                                     <p className="text-muted-foreground mb-1">Ginza Username</p>
                                     <div className="flex items-center gap-2 group">
-                                      <p className="font-medium">{player.ginzaUsername || '-'}</p>
+                                      <p className="font-medium">{capitalizeFirst(player.ginzaUsername) || '-'}</p>
                                       <Button
                                         size="sm"
                                         variant="ghost"
@@ -700,9 +737,18 @@ export default function PlayersTableNew() {
                                     </div>
                                   </div>
                                   <div>
-                                    <p className="text-muted-foreground mb-1">Country</p>
+                                    <p className="text-muted-foreground mb-1">Preferred Time Zones</p>
                                     <div className="flex items-center gap-2 group">
-                                      <p className="font-medium">{player.country || '-'}</p>
+                                      <p className="font-medium">
+                                        {(() => {
+                                          try {
+                                            const parsed = JSON.parse((player as any).preferredTimeZones || '[]')
+                                            return Array.isArray(parsed) && parsed.length > 0 ? parsed.join(', ') : '-'
+                                          } catch {
+                                            return '-'
+                                          }
+                                        })()}
+                                      </p>
                                       <Button
                                         size="sm"
                                         variant="ghost"
@@ -710,7 +756,7 @@ export default function PlayersTableNew() {
                                         onClick={(e) => {
                                           e.preventDefault()
                                           e.stopPropagation()
-                                          handleStartEdit(player, 'country', player.country, e)
+                                          handleStartEdit(player, 'preferredTimeZones', (player as any).preferredTimeZones, e)
                                         }}
                                         onMouseDown={(e) => {
                                           e.preventDefault()
@@ -721,7 +767,7 @@ export default function PlayersTableNew() {
                                       </Button>
                                     </div>
                                   </div>
-                                  {renderEditableField('Skill Level', player.skillLevel, player, 'skillLevel')}
+                                  {renderEditableField('Player Type', player.skillLevel, player, 'skillLevel')}
                                   {renderEditableField('Churn Risk', player.churnRisk, player, 'churnRisk')}
                                   {renderEditableField('VIP Tier', player.vipTier, player, 'vipTier')}
                                   <div>
@@ -771,7 +817,7 @@ export default function PlayersTableNew() {
                                             })
                                             if (res.ok) {
                                               await fetchPlayers()
-                                              await fetchAgents() // Refresh hosts list
+                                              await fetchAgents() // Refresh agents list
                                             } else {
                                               const errorText = await res.text()
                                               console.error('Failed to update isAgent:', {
@@ -843,13 +889,13 @@ export default function PlayersTableNew() {
           <DialogHeader>
             <DialogTitle>Edit {editingField}</DialogTitle>
             <DialogDescription>
-              Update {editingField} for {editingPlayer?.telegramHandle}
+              Update {editingField} for {capitalizeFirst(editingPlayer?.telegramHandle)}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             {editingField === 'skillLevel' ? (
               <div className="space-y-2">
-                <Label>Skill Level</Label>
+                <Label>Player Type</Label>
                 <Select value={dialogEditValue} onValueChange={setDialogEditValue}>
                   <SelectTrigger>
                     <SelectValue />
@@ -915,6 +961,18 @@ export default function PlayersTableNew() {
                   maxLength={40}
                   className="min-h-20"
                 />
+              </div>
+            ) : editingField === 'preferredTimeZones' ? (
+              <div className="space-y-2">
+                <Label>Preferred Time Zones</Label>
+                <Input
+                  value={dialogEditValue || ''}
+                  onChange={(e) => setDialogEditValue(e.target.value)}
+                  placeholder="e.g., EST, PST, UTC"
+                  maxLength={200}
+                  autoFocus
+                />
+                <p className="text-xs text-muted-foreground">Enter comma-separated time zones (e.g., EST, PST, UTC)</p>
               </div>
             ) : (
               <div className="space-y-2">

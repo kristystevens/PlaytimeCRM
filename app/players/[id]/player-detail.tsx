@@ -16,7 +16,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { calculateValueScore } from '@/lib/metrics'
-import PlaytimeSection from './playtime-section'
+import { format } from 'date-fns'
+import { formatMinutes } from '@/lib/playtime-utils'
+import { capitalizeFirst } from '@/lib/utils'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 type PlayerWithRelations = Player & {
   assignedRunner: Runner | null
@@ -29,16 +39,42 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
   const [localValues, setLocalValues] = useState({
     telegramHandle: initialPlayer.telegramHandle || '',
     ginzaUsername: initialPlayer.ginzaUsername || '',
-    country: initialPlayer.country || '',
+    name: (initialPlayer as any).name || '',
+    preferredTimeZones: (() => {
+      try {
+        const parsed = JSON.parse((initialPlayer as any).preferredTimeZones || '[]')
+        return Array.isArray(parsed) ? parsed.join(', ') : ''
+      } catch {
+        return ''
+      }
+    })(),
     totalDeposited: Number(initialPlayer.totalDeposited),
     totalWagered: Number(initialPlayer.totalWagered),
     netPnL: Number(initialPlayer.netPnL),
     avgBuyIn: Number(initialPlayer.avgBuyIn),
+    preferredPlaytimes: (() => {
+      try {
+        const parsed = JSON.parse((initialPlayer as any).preferredPlaytimes || '[]')
+        return Array.isArray(parsed) ? parsed.join(', ') : ''
+      } catch {
+        return ''
+      }
+    })(),
+    preferredStakes: (() => {
+      try {
+        const parsed = JSON.parse((initialPlayer as any).preferredStakes || '[]')
+        return Array.isArray(parsed) ? parsed.join(', ') : ''
+      } catch {
+        return ''
+      }
+    })(),
   })
   const [saving, setSaving] = useState(false)
   const [runners, setRunners] = useState<Runner[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [activityLogs, setActivityLogs] = useState<any[]>([])
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const pendingUpdatesRef = useRef<Record<string, any>>({})
 
@@ -47,11 +83,35 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
     setLocalValues({
       telegramHandle: player.telegramHandle || '',
       ginzaUsername: player.ginzaUsername || '',
-      country: player.country || '',
+      name: (player as any).name || '',
+      preferredTimeZones: (() => {
+        try {
+          const parsed = JSON.parse((player as any).preferredTimeZones || '[]')
+          return Array.isArray(parsed) ? parsed.join(', ') : ''
+        } catch {
+          return ''
+        }
+      })(),
       totalDeposited: Number(player.totalDeposited),
       totalWagered: Number(player.totalWagered),
       netPnL: Number(player.netPnL),
       avgBuyIn: Number(player.avgBuyIn),
+      preferredPlaytimes: (() => {
+        try {
+          const parsed = JSON.parse((player as any).preferredPlaytimes || '[]')
+          return Array.isArray(parsed) ? parsed.join(', ') : ''
+        } catch {
+          return ''
+        }
+      })(),
+      preferredStakes: (() => {
+        try {
+          const parsed = JSON.parse((player as any).preferredStakes || '[]')
+          return Array.isArray(parsed) ? parsed.join(', ') : ''
+        } catch {
+          return ''
+        }
+      })(),
     })
   }, [player.id])
 
@@ -93,6 +153,26 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
     saveTimeoutRef.current = setTimeout(async () => {
       const updates = { ...pendingUpdatesRef.current }
       pendingUpdatesRef.current = {}
+      
+      // Convert preferredPlaytimes from comma-separated string to array
+      if (updates.preferredPlaytimes !== undefined) {
+        updates.preferredPlaytimes = updates.preferredPlaytimes
+          ? updates.preferredPlaytimes.split(',').map((t: string) => t.trim()).filter((t: string) => t)
+          : []
+      }
+      // Convert preferredStakes from comma-separated string to array
+      if (updates.preferredStakes !== undefined) {
+        updates.preferredStakes = updates.preferredStakes
+          ? updates.preferredStakes.split(',').map((t: string) => t.trim()).filter((t: string) => t)
+          : []
+      }
+      
+      // Convert preferredTimeZones from comma-separated string to array
+      if (updates.preferredTimeZones !== undefined) {
+        updates.preferredTimeZones = updates.preferredTimeZones
+          ? updates.preferredTimeZones.split(',').map((t: string) => t.trim()).filter((t: string) => t)
+          : []
+      }
       
       setSaving(true)
       try {
@@ -152,16 +232,50 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
 
   const valueScore = calculateValueScore(player.totalDeposited, player.totalWagered, player.netPnL)
 
+  const handleDelete = async () => {
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/players/${player.id}`, {
+        method: 'DELETE',
+      })
+
+      if (res.ok) {
+        router.push('/players')
+      } else {
+        const error = await res.json()
+        alert(error.error || 'Failed to delete player')
+        setDeleting(false)
+      }
+    } catch (error) {
+      console.error('Error deleting player:', error)
+      alert('An error occurred while deleting the player')
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">{localValues.telegramHandle || player.telegramHandle}</h1>
-          <p className="text-muted-foreground">Player Details</p>
+          <h1 className="text-3xl font-bold">
+            {capitalizeFirst((player as any).ginzaUsername) || localValues.name || capitalizeFirst(localValues.telegramHandle) || capitalizeFirst(player.telegramHandle)}
+          </h1>
+          <p className="text-muted-foreground">
+            {(player as any).ginzaUsername && `Ginza: ${capitalizeFirst((player as any).ginzaUsername)}`}{" "}
+            {!((player as any).ginzaUsername) && 'Player Details'}
+          </p>
         </div>
-        <Button variant="outline" onClick={() => router.push('/players')}>
-          Back to Players
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => router.push('/players')}>
+            Back to Players
+          </Button>
+          <Button 
+            variant="destructive" 
+            onClick={() => setDeleteDialogOpen(true)}
+          >
+            Delete Player
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -170,15 +284,6 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
             <CardTitle>Basic Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Telegram Handle {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
-              <Input 
-                value={localValues.telegramHandle} 
-                onChange={(e) => handleInputChange('telegramHandle', e.target.value)}
-                placeholder="Enter Telegram handle"
-                maxLength={40}
-              />
-            </div>
             <div className="space-y-2">
               <Label>Ginza Username {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
               <Input 
@@ -189,27 +294,34 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
               />
             </div>
             <div className="space-y-2">
-              <Label>Country {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
+              <Label>Telegram Handle {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
               <Input 
-                value={localValues.country} 
-                onChange={(e) => handleInputChange('country', e.target.value)}
-                placeholder="Enter country"
+                value={localValues.telegramHandle} 
+                onChange={(e) => handleInputChange('telegramHandle', e.target.value)}
+                placeholder="Enter Telegram handle"
                 maxLength={40}
               />
             </div>
             <div className="space-y-2">
-              <Label>Player Type</Label>
-              <Select value={player.playerType || 'PLAYER'} onValueChange={(val) => handleSelectChange('playerType', val)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PLAYER">Player</SelectItem>
-                  <SelectItem value="RUNNER">Runner</SelectItem>
-                  <SelectItem value="AGENT">Host</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Name {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
+              <Input 
+                value={localValues.name} 
+                onChange={(e) => handleInputChange('name', e.target.value)}
+                placeholder="Enter player name"
+                maxLength={100}
+              />
             </div>
+            <div className="space-y-2">
+              <Label>Preferred Time Zones {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
+              <Input 
+                value={localValues.preferredTimeZones} 
+                onChange={(e) => handleInputChange('preferredTimeZones', e.target.value)}
+                placeholder="e.g., EST, PST, UTC"
+                maxLength={200}
+              />
+              <p className="text-xs text-muted-foreground">Enter comma-separated time zones (e.g., EST, PST, UTC)</p>
+            </div>
+            {/* Player Type field removed from UI */}
             <div className="space-y-2">
               <Label>VIP Tier</Label>
               <Select value={player.vipTier} onValueChange={(val) => handleSelectChange('vipTier', val)}>
@@ -250,7 +362,7 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Skill Level</Label>
+              <Label>Player Type</Label>
               <Select value={player.skillLevel || 'AMATEUR'} onValueChange={(val) => handleSelectChange('skillLevel', val)}>
                 <SelectTrigger>
                   <SelectValue />
@@ -263,6 +375,45 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
                   <SelectItem value="PUNTER">Punter</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Assigned Community Manager</Label>
+              <Select 
+                value={(player as any).assignedCommunityManager || 'none'} 
+                onValueChange={(val) => handleSelectChange('assignedCommunityManager', val === 'none' ? null : val)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="MIA">Mia</SelectItem>
+                  <SelectItem value="KRISTY">Kristy</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Community managers help build relationships and reduce churn. Assignments are based on who onboarded the player or alternating.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Preferred Playtimes {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
+              <Input 
+                value={localValues.preferredPlaytimes} 
+                onChange={(e) => handleInputChange('preferredPlaytimes', e.target.value)}
+                placeholder="e.g., 7pm-9pm, 5am-7am"
+                maxLength={200}
+              />
+              <p className="text-xs text-muted-foreground">Enter comma-separated time ranges (e.g., 7pm-9pm, 5am-7am)</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Preferred Stakes {saving && <span className="text-xs text-muted-foreground">(Saving...)</span>}</Label>
+              <Input 
+                value={localValues.preferredStakes} 
+                onChange={(e) => handleInputChange('preferredStakes', e.target.value)}
+                placeholder="e.g., 1/2 NL, 2/5 NL"
+                maxLength={200}
+              />
+              <p className="text-xs text-muted-foreground">Enter comma-separated stakes (e.g., 1/2 NL, 2/5 NL)</p>
             </div>
           </CardContent>
         </Card>
@@ -337,7 +488,7 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
                     if (res.ok) {
                       const updated = await res.json()
                       setPlayer(updated)
-                      // Refresh hosts list if needed
+                      // Refresh agents list if needed
                       const agentsRes = await fetch('/api/agents')
                       if (agentsRes.ok) {
                         const agentsData = await agentsRes.json()
@@ -387,16 +538,117 @@ export default function PlayerDetail({ player: initialPlayer }: { player: Player
         </Card>
       </div>
 
-      {/* Playtime Section */}
+      {/* Play sessions sourced from game data */}
       <Card>
         <CardHeader>
-          <CardTitle>Playtime Tracking</CardTitle>
-          <CardDescription>Track and analyze player playtime over time</CardDescription>
+          <CardTitle>Play Sessions</CardTitle>
+          <CardDescription>
+            Sessions for this player, based on entered games. Edit or delete games from the Games page.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <PlaytimeSection playerId={player.id} />
+          {Array.isArray((player as any).gamePlayers) && (player as any).gamePlayers.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-left p-2">Date / Time</th>
+                    <th className="text-left p-2">Host</th>
+                    <th className="text-left p-2">Buy-In</th>
+                    <th className="text-left p-2">Cashout</th>
+                    <th className="text-left p-2">PnL</th>
+                    <th className="text-left p-2">Playtime</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(player as any).gamePlayers
+                    .slice()
+                    .sort((a: any, b: any) => {
+                      const aDate = a.game?.playedAt ? new Date(a.game.playedAt).getTime() : 0
+                      const bDate = b.game?.playedAt ? new Date(b.game.playedAt).getTime() : 0
+                      return bDate - aDate
+                    })
+                    .map((gp: any) => {
+                      const game = gp.game
+                      const host = game?.host
+                      const pnl = gp.pnl ?? 0
+                      return (
+                        <tr key={gp.id} className="border-b">
+                          <td className="p-2">
+                            {game?.playedAt
+                              ? format(new Date(game.playedAt), 'MMM d, yyyy h:mm a')
+                              : '-'}
+                          </td>
+                          <td className="p-2">
+                            {host ? host.name || capitalizeFirst(host.telegramHandle) : '-'}
+                          </td>
+                          <td className="p-2">
+                            {gp.buyIn != null
+                              ? gp.buyIn.toLocaleString('en-US', {
+                                  style: 'currency',
+                                  currency: 'USD',
+                                })
+                              : '-'}
+                          </td>
+                          <td className="p-2">
+                            {gp.cashout != null
+                              ? gp.cashout.toLocaleString('en-US', {
+                                  style: 'currency',
+                                  currency: 'USD',
+                                })
+                              : '-'}
+                          </td>
+                          <td className="p-2">
+                            <span className={pnl >= 0 ? 'text-green-600' : 'text-red-600'}>
+                              {pnl >= 0 ? '+' : ''}
+                              {pnl.toLocaleString('en-US', {
+                                style: 'currency',
+                                currency: 'USD',
+                              })}
+                            </span>
+                          </td>
+                          <td className="p-2">
+                            {formatMinutes(gp.playtimeMinutes || 0)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              No play sessions yet. Enter games on the Games page to see them here.
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Player</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {capitalizeFirst(player.telegramHandle)}?
+              {player.isAgent && (
+                <span className="block mt-2 font-semibold text-red-600">
+                  This player is also a host. Deleting will remove them from both the Players and Agents pages.
+                </span>
+              )}
+              This action cannot be undone. All associated data (games, playtime, etc.) will also be removed.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? 'Deleting...' : 'Delete Player'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

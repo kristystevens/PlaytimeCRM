@@ -1,5 +1,5 @@
-// PostgreSQL schema (Supabase-compatible)
-// Works with Supabase for both local development and production
+// PostgreSQL schema for production (no Docker needed!)
+// This uses PostgreSQL (Supabase/Vercel Postgres)
 
 generator client {
   provider = "prisma-client-js"
@@ -10,8 +10,8 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Note: Using String for enums to maintain compatibility with existing code
-// PostgreSQL supports native enums, but we keep String for flexibility
+// Note: SQLite doesn't support enums, so we use String with constraints
+// The application code will validate enum values
 
 model User {
   id           String   @id @default(uuid())
@@ -34,8 +34,9 @@ model Player {
   id                String   @id @default(uuid())
   telegramHandle    String   @unique @map("telegram_handle")
   ginzaUsername     String?  @map("ginza_username")
+  name              String?  @map("name")
   walletAddress     String?  @unique @map("wallet_address")
-  country           String?
+  preferredTimeZones String  @default("[]") @map("preferred_time_zones") // JSON array as string (e.g., ["EST", "PST", "UTC"])
   joinedAt          DateTime @default(now()) @map("joined_at")
   playerType        String   @default("PLAYER") @map("player_type") // PLAYER, RUNNER, AGENT
   isRunner          Boolean  @default(false) @map("is_runner")
@@ -45,15 +46,18 @@ model Player {
   status            String   @default("ACTIVE") // ACTIVE, FADING, CHURNED
   churnRisk         String   @default("LOW") @map("churn_risk") // LOW, MED, HIGH
   skillLevel        String   @default("AMATEUR") @map("skill_level") // WHALE, PRO, NIT, AMATEUR, PUNTER
-  preferredGames    Json     @default("[]") @map("preferred_games") // JSON array
+  preferredGames    String   @default("[]") @map("preferred_games") // JSON array as string
+  preferredPlaytimes String  @default("[]") @map("preferred_playtimes") // JSON array as string (e.g., ["7pm-9pm", "5am-7am"])
+  preferredStakes   String   @default("[]") @map("preferred_stakes") // JSON array as string (e.g., ["1/2 NL", "2/5 NL"])
   notes             String?
+  assignedCommunityManager String? @map("assigned_community_manager") // MIA, KRISTY
   assignedRunnerId  String?  @map("assigned_runner_id")
   referredByAgentId String?  @map("referred_by_agent_id")
   lastActiveAt      DateTime? @map("last_active_at")
-  totalDeposited    Decimal  @default(0) @db.Decimal(18, 2) @map("total_deposited")
-  totalWagered      Decimal  @default(0) @db.Decimal(18, 2) @map("total_wagered")
-  netPnL            Decimal  @default(0) @db.Decimal(18, 2) @map("net_pnl")
-  avgBuyIn          Decimal  @default(0) @db.Decimal(18, 2) @map("avg_buy_in")
+  totalDeposited    Float    @default(0) @map("total_deposited")
+  totalWagered      Float    @default(0) @map("total_wagered")
+  netPnL            Float    @default(0) @map("net_pnl")
+  avgBuyIn          Float    @default(0) @map("avg_buy_in")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 
@@ -64,6 +68,7 @@ model Player {
   agentProfile    Agent?  @relation("PlayerAgentProfile")
   messageTasks    MessageTask[]
   playtimeEntries PlaytimeEntry[]
+  gamePlayers     GamePlayer[]
 
   @@index([telegramHandle])
   @@index([walletAddress])
@@ -85,15 +90,15 @@ model Runner {
   telegramHandle    String   @unique @map("telegram_handle")
   ginzaUsername     String?  @map("ginza_username")
   timezone          String?
-  languages         Json     @default("[]") // JSON array
+  languages         String   @default("[]") // JSON array as string
   status            String   @default("TRUSTED") // TRUSTED, WATCH, CUT
   bankrollAccess    Boolean  @default(false) @map("bankroll_access")
   maxTableSize      Int      @default(6) @map("max_table_size")
   strikeCount       Int      @default(0) @map("strike_count")
   compType          String   @default("PERCENT") @map("comp_type") // PERCENT, FLAT
-  compValue         Decimal  @default(0) @db.Decimal(18, 2) @map("comp_value")
-  totalPaid         Decimal  @default(0) @db.Decimal(18, 2) @map("total_paid")
-  outstandingBalance Decimal @default(0) @db.Decimal(18, 2) @map("outstanding_balance")
+  compValue         Float    @default(0) @map("comp_value")
+  totalPaid         Float    @default(0) @map("total_paid")
+  outstandingBalance Float   @default(0) @map("outstanding_balance")
   notes             String?
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
@@ -120,10 +125,10 @@ model Agent {
   timezone       String?  @map("timezone")
   primaryPlatform String  @default("TELEGRAM") @map("primary_platform") // TELEGRAM, DISCORD, TWITTER, OTHER
   status         String   @default("ACTIVE") // ACTIVE, INACTIVE, APPROACHING
-  revSharePct    Decimal  @default(0) @db.Decimal(5, 2) @map("rev_share_pct")
-  totalEarned    Decimal  @default(0) @db.Decimal(18, 2) @map("total_earned")
-  totalPaid      Decimal  @default(0) @db.Decimal(18, 2) @map("total_paid")
-  unpaidBalance  Decimal  @default(0) @db.Decimal(18, 2) @map("unpaid_balance")
+  revSharePct    Float    @default(0) @map("rev_share_pct")
+  totalEarned    Float    @default(0) @map("total_earned")
+  totalPaid      Float    @default(0) @map("total_paid")
+  unpaidBalance  Float    @default(0) @map("unpaid_balance")
   notes          String?
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -134,6 +139,7 @@ model Agent {
   referredPlayers Player[]         @relation("PlayerAgent")
   payouts         Payout[]
   messageTasks    MessageTask[]
+  hostedGames     Game[]
 
   @@index([telegramHandle])
   @@index([status])
@@ -147,7 +153,7 @@ model ActivityLog {
   entityType String   @map("entity_type") // PLAYER, RUNNER, AGENT, PAYOUT, MESSAGETASK
   entityId   String   @map("entity_id")
   action     String   // CREATE, UPDATE, DELETE, ASSIGN, TAG, PAYOUT
-  changes    Json?    // JSON object
+  changes    String?  // JSON as string
   createdAt  DateTime @default(now()) @map("created_at")
 
   // Relations
@@ -163,7 +169,7 @@ model Payout {
   id         String   @id @default(uuid())
   payeeType  String   @map("payee_type") // RUNNER, AGENT
   payeeId    String   @map("payee_id")
-  amount     Decimal  @db.Decimal(18, 2)
+  amount     Float
   periodStart DateTime @map("period_start")
   periodEnd   DateTime @map("period_end")
   status     String   @default("PENDING") // PENDING, PAID, VOID
@@ -234,3 +240,40 @@ model PlaytimeEntry {
   @@index([playerId, playedOn])
   @@map("playtime_entries")
 }
+
+model Game {
+  id          String   @id @default(uuid())
+  hostId      String?  @map("host_id") // Agent ID who hosted the game
+  host         Agent?   @relation(fields: [hostId], references: [id])
+  playedAt     DateTime @map("played_at") // Date and time of the game
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  gamePlayers GamePlayer[]
+
+  @@index([hostId])
+  @@index([playedAt])
+  @@map("games")
+}
+
+model GamePlayer {
+  id          String   @id @default(uuid())
+  gameId      String   @map("game_id")
+  game        Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  playerId    String   @map("player_id")
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  
+  buyIn       Float    @map("buy_in")
+  cashout     Float    @default(0)
+  pnl         Float    @default(0) // Calculated as cashout - buyIn
+  playtimeMinutes Int  @default(0) @map("playtime_minutes")
+  
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([gameId])
+  @@index([playerId])
+  @@map("game_players")
+}
+

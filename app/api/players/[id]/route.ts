@@ -54,15 +54,19 @@ export async function PATCH(
     const updateData: any = {}
     if (validated.telegramHandle !== undefined) updateData.telegramHandle = validated.telegramHandle
     if (validated.ginzaUsername !== undefined) updateData.ginzaUsername = validated.ginzaUsername
-    if (validated.country !== undefined) updateData.country = validated.country
+    if (validated.name !== undefined) updateData.name = validated.name
+    if (validated.preferredTimeZones !== undefined) updateData.preferredTimeZones = validated.preferredTimeZones ? JSON.stringify(validated.preferredTimeZones) : '[]'
     if (validated.playerType !== undefined) updateData.playerType = validated.playerType
     // playerID is auto-assigned and cannot be updated
     if (validated.vipTier !== undefined) updateData.vipTier = validated.vipTier
     if (validated.status !== undefined) updateData.status = validated.status
     if (validated.churnRisk !== undefined) updateData.churnRisk = validated.churnRisk
     if (validated.skillLevel !== undefined) updateData.skillLevel = validated.skillLevel
-    if (validated.preferredGames !== undefined) updateData.preferredGames = validated.preferredGames
+    if (validated.preferredGames !== undefined) updateData.preferredGames = validated.preferredGames ? JSON.stringify(validated.preferredGames) : '[]'
+    if (validated.preferredPlaytimes !== undefined) updateData.preferredPlaytimes = validated.preferredPlaytimes ? JSON.stringify(validated.preferredPlaytimes) : '[]'
+    if (validated.preferredStakes !== undefined) updateData.preferredStakes = validated.preferredStakes ? JSON.stringify(validated.preferredStakes) : '[]'
     if (validated.notes !== undefined) updateData.notes = validated.notes
+    if (validated.assignedCommunityManager !== undefined) updateData.assignedCommunityManager = validated.assignedCommunityManager
     if (validated.assignedRunnerId !== undefined) updateData.assignedRunnerId = validated.assignedRunnerId
     if (validated.referredByAgentId !== undefined) updateData.referredByAgentId = validated.referredByAgentId
     if (validated.lastActiveAt !== undefined) {
@@ -104,7 +108,7 @@ export async function PATCH(
     // Handle isAgent flag - create/delete Agent profile
     if (validated.isAgent !== undefined) {
       if (validated.isAgent) {
-        // Ensure player has a playerID (hosts are also players and need unique serialized IDs)
+        // Ensure player has a playerID (agents are also players and need unique serialized IDs)
         if (!existing.playerID) {
           const playerID = await getNextPlayerID()
           updateData.playerID = playerID
@@ -199,6 +203,9 @@ export async function PATCH(
       return NextResponse.json(player)
     }
 
+    // Check if status is changing from ACTIVE to FADING before update
+    const statusChangingToFading = validated.status === 'FADING' && existing.status === 'ACTIVE'
+
     const player = await prisma.player.update({
       where: { id: params.id },
       data: updateData,
@@ -212,9 +219,20 @@ export async function PATCH(
 
     const systemUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } })
     if (systemUser) {
+      // Log general update
       await logActivity(systemUser.id, 'PLAYER', player.id, 'UPDATE', {
         changes: validated,
       })
+      
+      // Log specific status change from ACTIVE to FADING
+      if (statusChangingToFading) {
+        await logActivity(systemUser.id, 'PLAYER', player.id, 'UPDATE', {
+          action: 'STATUS_CHANGE',
+          from: 'ACTIVE',
+          to: 'FADING',
+          reason: 'Player status changed from ACTIVE to FADING',
+        })
+      }
     }
 
     return NextResponse.json(player)
@@ -234,12 +252,32 @@ export async function DELETE(
   try {
     const player = await prisma.player.findUnique({
       where: { id: params.id },
+      include: {
+        agentProfile: true,
+        runnerProfile: true,
+      },
     })
 
     if (!player) {
       return NextResponse.json({ error: 'Player not found' }, { status: 404 })
     }
 
+    // If player is also an agent, delete the agent record first
+    // (The cascade should handle this, but we'll be explicit)
+    if (player.agentProfile) {
+      await prisma.agent.deleteMany({
+        where: { playerId: params.id },
+      })
+    }
+
+    // If player is also a runner, delete the runner record first
+    if (player.runnerProfile) {
+      await prisma.runner.deleteMany({
+        where: { playerId: params.id },
+      })
+    }
+
+    // Delete the player (cascade will handle GamePlayer, PlaytimeEntry, etc.)
     await prisma.player.delete({
       where: { id: params.id },
     })
@@ -248,6 +286,8 @@ export async function DELETE(
     if (systemUser) {
       await logActivity(systemUser.id, 'PLAYER', params.id, 'DELETE', {
         telegramHandle: player.telegramHandle,
+        wasAgent: !!player.agentProfile,
+        wasRunner: !!player.runnerProfile,
       })
     }
 

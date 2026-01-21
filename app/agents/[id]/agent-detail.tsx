@@ -14,11 +14,13 @@ export default function AgentDetail({ agent }: { agent: any }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">{agent.name}</h1>
-          <p className="text-muted-foreground">Host Details</p>
+          <h1 className="text-3xl font-bold">
+            {agent.ginzaUsername || agent.telegramHandle || agent.name}
+          </h1>
+          <p className="text-muted-foreground">Agent Details</p>
         </div>
         <Button variant="outline" onClick={() => router.push('/agents')}>
-          Back to Hosts
+          Back to Agents
         </Button>
       </div>
 
@@ -28,16 +30,20 @@ export default function AgentDetail({ agent }: { agent: any }) {
             <CardTitle>Basic Information</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div>
-              <div className="text-sm text-muted-foreground">Telegram Handle</div>
-              <div className="font-medium">{agent.telegramHandle}</div>
-            </div>
             {agent.ginzaUsername && (
               <div>
                 <div className="text-sm text-muted-foreground">Ginza Username</div>
                 <div className="font-medium">{agent.ginzaUsername}</div>
               </div>
             )}
+            <div>
+              <div className="text-sm text-muted-foreground">Telegram Handle</div>
+              <div className="font-medium">{agent.telegramHandle}</div>
+            </div>
+            <div>
+              <div className="text-sm text-muted-foreground">Name</div>
+              <div className="font-medium">{agent.name}</div>
+            </div>
             <div>
               <div className="text-sm text-muted-foreground">Status</div>
               <Badge variant={

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import Link from 'next/link'
 import { formatMinutes } from '@/lib/playtime-utils'
+import { capitalizeFirst } from '@/lib/utils'
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { Player, Runner, Agent } from '@prisma/client'
 
@@ -33,18 +34,16 @@ export default function PlayersTableNew() {
   const [players, setPlayers] = useState<PlayerWithRelations[]>([])
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState({
-    playerType: '',
     status: '',
     churnRisk: '',
-    assignedRunnerId: '',
-    referredByAgentId: '',
-    country: '',
+    preferredTimeZones: '',
     search: '',
   })
+  const [sortBy, setSortBy] = useState<'playerID' | 'name' | 'status' | 'totalPlaytime' | 'lastActiveAt'>('lastActiveAt')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [runners, setRunners] = useState<Runner[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
-  const [showFilters, setShowFilters] = useState(false)
 
   const safeRunners = Array.isArray(runners) ? runners : []
   const safeAgents = Array.isArray(agents) ? agents : []
@@ -52,23 +51,24 @@ export default function PlayersTableNew() {
 
   useEffect(() => {
     fetchPlayers()
+  }, [filters, sortBy, sortOrder])
+
+  // Fetch runners and agents once on mount (for display in expanded rows)
+  useEffect(() => {
     fetchRunners()
     fetchAgents()
-  }, [filters])
+  }, [])
 
   const fetchPlayers = async () => {
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      if (filters.playerType) params.append('playerType', filters.playerType)
       if (filters.status) params.append('status', filters.status)
       if (filters.churnRisk) params.append('churnRisk', filters.churnRisk)
-      if (filters.assignedRunnerId) params.append('assignedRunnerId', filters.assignedRunnerId)
-      if (filters.referredByAgentId) params.append('referredByAgentId', filters.referredByAgentId)
-      if (filters.country) params.append('country', filters.country)
+      if (filters.preferredTimeZones) params.append('preferredTimeZones', filters.preferredTimeZones)
       if (filters.search) params.append('search', filters.search)
-      params.append('sortBy', 'lastActiveAt')
-      params.append('sortOrder', 'desc')
+      params.append('sortBy', sortBy)
+      params.append('sortOrder', sortOrder)
 
       const res = await fetch(`/api/players?${params}`)
       if (!res.ok) {
@@ -121,6 +121,24 @@ export default function PlayersTableNew() {
     }
   }
 
+  const handleSort = (column: 'playerID' | 'name' | 'status' | 'totalPlaytime' | 'lastActiveAt') => {
+    setSortBy((prevBy) => {
+      if (prevBy === column) {
+        // Toggle sort order
+        setSortOrder((prevOrder) => (prevOrder === 'asc' ? 'desc' : 'asc'))
+        return prevBy
+      }
+
+      // Default order: desc for numeric/date, asc for text
+      if (column === 'playerID' || column === 'totalPlaytime' || column === 'lastActiveAt') {
+        setSortOrder('desc')
+      } else {
+        setSortOrder('asc')
+      }
+      return column
+    })
+  }
+
   const toggleRow = (id: string, e?: MouseEvent) => {
     if (e) {
       e.stopPropagation()
@@ -144,118 +162,6 @@ export default function PlayersTableNew() {
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Filters</CardTitle>
-            <Button
-              variant="outline"
-              onClick={() => setShowFilters(!showFilters)}
-              className="md:hidden"
-            >
-              {showFilters ? 'Hide' : 'Show'} Filters
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className={showFilters ? 'block' : 'hidden md:block'}>
-          <div className="space-y-4">
-            <Input
-              placeholder="Search telegram/wallet..."
-              value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-              className="max-w-md"
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <Select
-                value={filters.playerType || 'all'}
-                onValueChange={(val) =>
-                  setFilters({ ...filters, playerType: val === 'all' ? '' : val })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="PLAYER">Player</SelectItem>
-                  <SelectItem value="RUNNER">Runner</SelectItem>
-                  <SelectItem value="AGENT">Agent</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={filters.status || 'all'}
-                onValueChange={(val) =>
-                  setFilters({ ...filters, status: val === 'all' ? '' : val })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="ACTIVE">Active</SelectItem>
-                  <SelectItem value="FADING">Fading</SelectItem>
-                  <SelectItem value="CHURNED">Churned</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={filters.churnRisk || 'all'}
-                onValueChange={(val) =>
-                  setFilters({ ...filters, churnRisk: val === 'all' ? '' : val })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Churn Risk" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Risks</SelectItem>
-                  <SelectItem value="LOW">Low</SelectItem>
-                  <SelectItem value="MED">Medium</SelectItem>
-                  <SelectItem value="HIGH">High</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={filters.assignedRunnerId || 'all'}
-                onValueChange={(val) =>
-                  setFilters({ ...filters, assignedRunnerId: val === 'all' ? '' : val })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Runner" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Runners</SelectItem>
-                  {safeRunners.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.name || r.telegramHandle}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={filters.referredByAgentId || 'all'}
-                onValueChange={(val) =>
-                  setFilters({ ...filters, referredByAgentId: val === 'all' ? '' : val })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Agent" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Agents</SelectItem>
-                  {safeAgents.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.name || a.telegramHandle}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Players Table */}
       <Card>
         <CardHeader>
@@ -270,12 +176,78 @@ export default function PlayersTableNew() {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left p-3 font-medium">Player ID</th>
-                  <th className="text-left p-3 font-medium">Player</th>
-                  <th className="text-left p-3 font-medium">Status</th>
-                  <th className="text-left p-3 font-medium">Total Playtime</th>
-                  <th className="text-left p-3 font-medium">Last Active</th>
+                  <th
+                    className="text-left p-3 font-medium cursor-pointer select-none"
+                    onClick={() => handleSort('playerID')}
+                  >
+                    Player ID
+                  </th>
+                  <th
+                    className="text-left p-3 font-medium cursor-pointer select-none"
+                    onClick={() => handleSort('name')}
+                  >
+                    Player
+                  </th>
+                  <th
+                    className="text-left p-3 font-medium cursor-pointer select-none"
+                    onClick={() => handleSort('status')}
+                  >
+                    Status
+                  </th>
+                  <th
+                    className="text-left p-3 font-medium cursor-pointer select-none"
+                    onClick={() => handleSort('totalPlaytime')}
+                  >
+                    Total Playtime
+                  </th>
+                  <th
+                    className="text-left p-3 font-medium cursor-pointer select-none"
+                    onClick={() => handleSort('lastActiveAt')}
+                  >
+                    Last Active
+                  </th>
                   <th className="text-left p-3 font-medium">Actions</th>
+                </tr>
+                <tr className="border-b bg-muted/30">
+                  <th className="p-2">
+                    {/* No filter for Player ID */}
+                  </th>
+                  <th className="p-2">
+                    <Input
+                      placeholder="Search..."
+                      value={filters.search}
+                      onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+                      className="h-8 text-sm"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </th>
+                  <th className="p-2">
+                    <Select
+                      value={filters.status || 'all'}
+                      onValueChange={(val) =>
+                        setFilters({ ...filters, status: val === 'all' ? '' : val })
+                      }
+                    >
+                      <SelectTrigger className="h-8 text-sm" onClick={(e) => e.stopPropagation()}>
+                        <SelectValue placeholder="All" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="ACTIVE">Active</SelectItem>
+                        <SelectItem value="FADING">Fading</SelectItem>
+                        <SelectItem value="CHURNED">Churned</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </th>
+                  <th className="p-2">
+                    {/* No filter for Total Playtime */}
+                  </th>
+                  <th className="p-2">
+                    {/* No filter for Last Active */}
+                  </th>
+                  <th className="p-2">
+                    {/* No filter for Actions */}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -286,7 +258,36 @@ export default function PlayersTableNew() {
                     </td>
                   </tr>
                 ) : (
-                  safePlayers.map((player) => {
+                  // Apply client-side sort for totalPlaytime, otherwise rely on server sort
+                  [...safePlayers]
+                    .sort((a, b) => {
+                      if (sortBy === 'totalPlaytime') {
+                        const aVal = a.totalPlaytime || 0
+                        const bVal = b.totalPlaytime || 0
+                        return sortOrder === 'asc' ? aVal - bVal : bVal - aVal
+                      }
+                      if (sortBy === 'playerID') {
+                        const aVal = (a.playerID || '').localeCompare(b.playerID || '')
+                        return sortOrder === 'asc' ? aVal : -aVal
+                      }
+                      if (sortBy === 'name') {
+                        const aName = (a.ginzaUsername || (a as any).name || a.telegramHandle || '').toLowerCase()
+                        const bName = (b.ginzaUsername || (b as any).name || b.telegramHandle || '').toLowerCase()
+                        const cmp = aName.localeCompare(bName)
+                        return sortOrder === 'asc' ? cmp : -cmp
+                      }
+                      if (sortBy === 'status') {
+                        const cmp = (a.status || '').localeCompare(b.status || '')
+                        return sortOrder === 'asc' ? cmp : -cmp
+                      }
+                      if (sortBy === 'lastActiveAt') {
+                        const aTime = a.lastActiveAt ? new Date(a.lastActiveAt).getTime() : 0
+                        const bTime = b.lastActiveAt ? new Date(b.lastActiveAt).getTime() : 0
+                        return sortOrder === 'asc' ? aTime - bTime : bTime - aTime
+                      }
+                      return 0
+                    })
+                    .map((player) => {
                     const isExpanded = expandedRows.has(player.id)
                     return (
                       <React.Fragment key={player.id}>
@@ -299,12 +300,13 @@ export default function PlayersTableNew() {
                           </td>
                           <td className="p-3">
                             <div className="flex flex-col">
-                              <span className="font-medium">{player.telegramHandle}</span>
-                              {player.ginzaUsername && (
-                                <span className="text-xs text-muted-foreground">
-                                  {player.ginzaUsername}
-                                </span>
-                              )}
+                              <span className="font-medium">
+                                {capitalizeFirst(player.ginzaUsername) || (player as any).name || capitalizeFirst(player.telegramHandle)}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {capitalizeFirst(player.ginzaUsername)}
+                                {(!player.ginzaUsername && player.telegramHandle) && ` • ${capitalizeFirst(player.telegramHandle)}`}
+                              </span>
                             </div>
                           </td>
                           <td className="p-3">
@@ -368,14 +370,23 @@ export default function PlayersTableNew() {
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                                 <div>
                                   <p className="text-muted-foreground">Ginza Username</p>
-                                  <p className="font-medium">{player.ginzaUsername || '-'}</p>
+                                  <p className="font-medium">{capitalizeFirst(player.ginzaUsername) || '-'}</p>
                                 </div>
                                 <div>
-                                  <p className="text-muted-foreground">Country</p>
-                                  <p className="font-medium">{player.country || '-'}</p>
+                                  <p className="text-muted-foreground">Preferred Time Zones</p>
+                                  <p className="font-medium">
+                                    {(() => {
+                                      try {
+                                        const parsed = JSON.parse((player as any).preferredTimeZones || '[]')
+                                        return Array.isArray(parsed) && parsed.length > 0 ? parsed.join(', ') : '-'
+                                      } catch {
+                                        return '-'
+                                      }
+                                    })()}
+                                  </p>
                                 </div>
                                 <div>
-                                  <p className="text-muted-foreground">Skill Level</p>
+                                  <p className="text-muted-foreground">Player Type</p>
                                   <p className="font-medium">{player.skillLevel}</p>
                                 </div>
                                 <div>
@@ -421,6 +432,10 @@ export default function PlayersTableNew() {
                                       '-'
                                     )}
                                   </p>
+                                </div>
+                                <div>
+                                  <p className="text-muted-foreground">Assigned Community Manager</p>
+                                  <p className="font-medium">{(player as any).assignedCommunityManager || '-'}</p>
                                 </div>
                                 {player.walletAddress && (
                                   <div>

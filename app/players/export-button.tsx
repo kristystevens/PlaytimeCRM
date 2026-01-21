@@ -23,12 +23,13 @@ export default function PlayersTableExportButton() {
       // Convert to CSV
       const headers = [
         'Telegram',
+        'Name',
         'Ginza Username',
-        'Type',
         'Status',
         'Churn Risk',
-        'Skill Level',
-        'Country',
+        'Player Type',
+        'Assigned Community Manager',
+        'Preferred Time Zones',
         'Last Active',
         'Most Active Times (EST)',
         'Total Playtime',
@@ -54,12 +55,20 @@ export default function PlayersTableExportButton() {
 
         return [
           player.telegramHandle || '',
+          (player as any).name || '',
           player.ginzaUsername || '',
-          player.playerType || 'PLAYER',
           player.status || '',
           player.churnRisk || '',
           player.skillLevel || '',
-          player.country || '',
+          (player as any).assignedCommunityManager || '',
+          (() => {
+            try {
+              const parsed = JSON.parse(player.preferredTimeZones || '[]')
+              return Array.isArray(parsed) ? parsed.join(', ') : ''
+            } catch {
+              return ''
+            }
+          })(),
           formatDate(player.lastActiveAt),
           player.mostActiveTimes || '',
           formatMinutes(player.totalPlaytime || 0),

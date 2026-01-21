@@ -11,10 +11,10 @@ async function main() {
     const players = await prisma.player.findMany({
       where: {
         OR: [
-          { telegramHandle: { contains: 'Ginjongun', mode: 'insensitive' } },
-          { telegramHandle: { contains: 'Gingjongun', mode: 'insensitive' } },
-          { ginzaUsername: { contains: 'Ginjongun', mode: 'insensitive' } },
-          { ginzaUsername: { contains: 'Gingjongun', mode: 'insensitive' } },
+          { telegramHandle: { contains: 'Ginjongun' } },
+          { telegramHandle: { contains: 'Gingjongun' } },
+          { ginzaUsername: { contains: 'Ginjongun' } },
+          { ginzaUsername: { contains: 'Gingjongun' } },
         ],
       },
       include: {

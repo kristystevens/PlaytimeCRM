@@ -130,9 +130,9 @@ export default function AgentsTable() {
       <table className="w-full">
         <thead>
           <tr className="border-b">
-            <th className="px-4 py-2 text-left font-medium">Name</th>
-            <th className="px-4 py-2 text-left font-medium">Telegram</th>
             <th className="px-4 py-2 text-left font-medium">Ginza Username</th>
+            <th className="px-4 py-2 text-left font-medium">Telegram</th>
+            <th className="px-4 py-2 text-left font-medium">Name</th>
             <th className="px-4 py-2 text-left font-medium">Status</th>
             <th className="px-4 py-2 text-left font-medium">Timezone</th>
             <th className="px-4 py-2 text-left font-medium">Notes</th>
@@ -151,12 +151,13 @@ export default function AgentsTable() {
 
             return (
               <tr key={agent.id} className="border-b hover:bg-muted/50">
+                {/* Ginza Username */}
                 <td className="px-4 py-2">
-                  {isEditingName ? (
+                  {isEditingGinza ? (
                     <div className="flex items-center gap-2">
                       <Input
-                        value={editValues.name ?? agent.name}
-                        onChange={(e) => setEditValues({ ...editValues, name: e.target.value })}
+                        value={(editValues.ginzaUsername ?? agent.ginzaUsername) || ''}
+                        onChange={(e) => setEditValues({ ...editValues, ginzaUsername: e.target.value || null })}
                         className="h-8"
                         autoFocus
                       />
@@ -169,20 +170,20 @@ export default function AgentsTable() {
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 group">
-                      <Link href={`/agents/${agent.id}`} className="hover:underline font-medium">
-                        {agent.name}
-                      </Link>
+                      <span>{agent.ginzaUsername || '-'}</span>
                       <Button
                         size="sm"
                         variant="ghost"
                         className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-                        onClick={() => handleStartEdit(agent.id, 'name', agent.name)}
+                        onClick={() => handleStartEdit(agent.id, 'ginzaUsername', agent.ginzaUsername)}
                       >
                         <Pencil className="h-3 w-3" />
                       </Button>
                     </div>
                   )}
                 </td>
+
+                {/* Telegram */}
                 <td className="px-4 py-2">
                   {isEditingTelegram ? (
                     <div className="flex items-center gap-2">
@@ -213,12 +214,14 @@ export default function AgentsTable() {
                     </div>
                   )}
                 </td>
+
+                {/* Name */}
                 <td className="px-4 py-2">
-                  {isEditingGinza ? (
+                  {isEditingName ? (
                     <div className="flex items-center gap-2">
                       <Input
-                        value={(editValues.ginzaUsername ?? agent.ginzaUsername) || ''}
-                        onChange={(e) => setEditValues({ ...editValues, ginzaUsername: e.target.value || null })}
+                        value={editValues.name ?? agent.name}
+                        onChange={(e) => setEditValues({ ...editValues, name: e.target.value })}
                         className="h-8"
                         autoFocus
                       />
@@ -231,12 +234,14 @@ export default function AgentsTable() {
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 group">
-                      <span>{agent.ginzaUsername || '-'}</span>
+                      <Link href={`/agents/${agent.id}`} className="hover:underline font-medium">
+                        {agent.name}
+                      </Link>
                       <Button
                         size="sm"
                         variant="ghost"
                         className="opacity-0 group-hover:opacity-100 h-6 w-6 p-0"
-                        onClick={() => handleStartEdit(agent.id, 'ginzaUsername', agent.ginzaUsername)}
+                        onClick={() => handleStartEdit(agent.id, 'name', agent.name)}
                       >
                         <Pencil className="h-3 w-3" />
                       </Button>
@@ -363,7 +368,7 @@ export default function AgentsTable() {
         </tbody>
       </table>
       {safeAgents.length === 0 && (
-        <div className="p-8 text-center text-muted-foreground">No hosts found</div>
+        <div className="p-8 text-center text-muted-foreground">No agents found</div>
       )}
     </div>
   )

@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { startOfDay, subDays, format, startOfWeek, startOfMonth, startOfYear, endOfWeek, endOfMonth, endOfYear } from 'date-fns'
+import {
+  startOfDay,
+  format,
+  startOfWeek,
+  startOfMonth,
+  startOfYear,
+  endOfWeek,
+  endOfMonth,
+  endOfYear,
+} from 'date-fns'
 
 export const dynamic = 'force-dynamic'
+
+// Usernames to exclude from top players chart
+const EXCLUDED_USERNAMES = ['kendalls', 'meowster', 'miguel', 'kimchipapi', 'jquin22'].map(u => u.toLowerCase())
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,46 +24,46 @@ export async function GET(request: NextRequest) {
     const now = new Date()
     let startDate: Date
     let endDate: Date
-    
-    // Calculate date range based on period
-    // Include entries up to 1 year in the future to handle test data
-    const futureDate = new Date(now)
-    futureDate.setFullYear(futureDate.getFullYear() + 1)
-    const maxEndDate = startOfDay(futureDate)
-    
-    // For month and year, include all data from 2026 onwards to handle test data
-    const year2026Start = new Date('2026-01-01')
-    
+
+    // Calculate date range based on period, always using *recent* data
     switch (period) {
-      case 'day':
+      case 'day': {
         startDate = startOfDay(now)
-        endDate = maxEndDate
+        endDate = startOfDay(now)
         break
-      case 'week':
+      }
+      case 'week': {
         startDate = startOfWeek(now, { weekStartsOn: 1 })
-        endDate = maxEndDate
+        endDate = endOfWeek(now, { weekStartsOn: 1 })
         break
-      case 'month':
-        // For month, include all entries from 2026 to handle test data
-        startDate = year2026Start
-        endDate = maxEndDate
+      }
+      case 'month': {
+        startDate = startOfMonth(now)
+        endDate = endOfMonth(now)
         break
-      case 'year':
-        // For year, include all entries from 2026
-        startDate = year2026Start
-        endDate = maxEndDate
+      }
+      case 'year': {
+        startDate = startOfYear(now)
+        endDate = endOfYear(now)
         break
-      default:
-        startDate = year2026Start
-        endDate = maxEndDate
+      }
+      default: {
+        startDate = startOfMonth(now)
+        endDate = endOfMonth(now)
+      }
     }
     
-    // Get all playtime entries in the date range
-    const entries = await prisma.playtimeEntry.findMany({
+    // Get all game-sourced playtime entries in the date range
+    const entries = await prisma.gamePlayer.findMany({
       where: {
-        playedOn: { 
-          gte: startDate,
-          lte: endDate,
+        playtimeMinutes: {
+          gt: 0,
+        },
+        game: {
+          playedAt: {
+            gte: startDate,
+            lte: endDate,
+          },
         },
       },
       include: {
@@ -59,37 +71,55 @@ export async function GET(request: NextRequest) {
           select: {
             id: true,
             telegramHandle: true,
+            ginzaUsername: true,
+          },
+        },
+        game: {
+          select: {
+            playedAt: true,
           },
         },
       },
-      orderBy: { playedOn: 'asc' },
+      orderBy: {
+        game: {
+          playedAt: 'asc',
+        },
+      },
     })
     
-    // Group by player and calculate total minutes
-    const playerTotals = new Map<string, { playerId: string; telegramHandle: string; totalMinutes: number; entries: Array<{ date: string; minutes: number }> }>()
+    // Group by player and calculate total minutes per day
+    const playerTotals = new Map<string, { playerId: string; label: string; totalMinutes: number; entries: Array<{ date: string; minutes: number }> }>()
     
-    for (const entry of entries) {
-      const playerId = entry.playerId
-      const dateStr = format(startOfDay(entry.playedOn), 'yyyy-MM-dd')
+    for (const gp of entries) {
+      const playerId = gp.player.id
+      const rawLabel = gp.player.ginzaUsername || gp.player.telegramHandle
+      const normalizedLabel = rawLabel ? rawLabel.toLowerCase() : ''
+      
+      // Skip excluded usernames
+      if (EXCLUDED_USERNAMES.includes(normalizedLabel)) {
+        continue
+      }
+      
+      const dateStr = format(startOfDay(gp.game.playedAt), 'yyyy-MM-dd')
+      const label = rawLabel ? rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1).toLowerCase() : ''
       
       if (!playerTotals.has(playerId)) {
         playerTotals.set(playerId, {
           playerId,
-          telegramHandle: entry.player.telegramHandle,
+          label,
           totalMinutes: 0,
           entries: [],
         })
       }
       
       const playerData = playerTotals.get(playerId)!
-      playerData.totalMinutes += entry.minutes
+      playerData.totalMinutes += gp.playtimeMinutes || 0
       
-      // Add or update entry for this date
       const existingEntry = playerData.entries.find(e => e.date === dateStr)
       if (existingEntry) {
-        existingEntry.minutes += entry.minutes
+        existingEntry.minutes += gp.playtimeMinutes || 0
       } else {
-        playerData.entries.push({ date: dateStr, minutes: entry.minutes })
+        playerData.entries.push({ date: dateStr, minutes: gp.playtimeMinutes || 0 })
       }
     }
     
@@ -117,7 +147,7 @@ export async function GET(request: NextRequest) {
       
       return {
         playerId: player.playerId,
-        telegramHandle: player.telegramHandle,
+        label: player.label,
         totalMinutes: player.totalMinutes,
         data,
       }

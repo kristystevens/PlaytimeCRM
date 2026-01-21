@@ -34,7 +34,7 @@ async function main() {
       }
 
       // For each date with multiple entries, merge them
-      for (const [dateKey, dateEntries] of entriesByDate.entries()) {
+      for (const [dateKey, dateEntries] of Array.from(entriesByDate.entries())) {
         if (dateEntries.length > 1) {
           console.log(`  Found ${dateEntries.length} entries for ${player.telegramHandle} on ${dateKey}`)
           

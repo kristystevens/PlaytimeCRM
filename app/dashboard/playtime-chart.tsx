@@ -2,17 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import {
   Select,
   SelectContent,
@@ -26,14 +15,9 @@ import { format, parse, differenceInMinutes } from 'date-fns'
 
 type TopPlayerData = {
   playerId: string
-  telegramHandle: string
+  label: string
   totalMinutes: number
   data: Array<{ date: string; minutes: number }>
-}
-
-type Player = {
-  id: string
-  telegramHandle: string
 }
 
 type TimePeriod = 'day' | 'week' | 'month' | 'year'
@@ -41,22 +25,10 @@ type TimePeriod = 'day' | 'week' | 'month' | 'year'
 export default function PlaytimeChart() {
   const [topPlayers, setTopPlayers] = useState<TopPlayerData[]>([])
   const [loading, setLoading] = useState(true)
-  const [inputDialogOpen, setInputDialogOpen] = useState(false)
-  const [players, setPlayers] = useState<any[]>([])
-  
-  // Ensure players is always an array
-  const safePlayers = Array.isArray(players) ? players : []
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string>('')
-  const [inputDate, setInputDate] = useState(format(new Date(), 'yyyy-MM-dd'))
-  const [inputStartTime, setInputStartTime] = useState('')
-  const [inputEndTime, setInputEndTime] = useState('')
-  const [inputMinutes, setInputMinutes] = useState('')
-  const [submitting, setSubmitting] = useState(false)
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('month')
 
   useEffect(() => {
     loadData()
-    loadPlayers()
   }, [timePeriod])
 
   const getPeriodDescription = (period: TimePeriod): string => {
@@ -71,24 +43,6 @@ export default function PlaytimeChart() {
         return 'Top 10 players by playtime this year'
       default:
         return 'Top 10 players by playtime this month'
-    }
-  }
-
-  const calculateMinutes = (date: string, startTime: string, endTime: string): number => {
-    if (!date || !startTime || !endTime) return 0
-    try {
-      const startDateTime = parse(`${date} ${startTime}`, 'yyyy-MM-dd HH:mm', new Date())
-      let endDateTime = parse(`${date} ${endTime}`, 'yyyy-MM-dd HH:mm', new Date())
-      
-      // Handle next day (e.g., 11:30pm to 12:30am)
-      if (endDateTime < startDateTime) {
-        endDateTime = new Date(endDateTime.getTime() + 24 * 60 * 60 * 1000)
-      }
-      
-      return Math.max(0, differenceInMinutes(endDateTime, startDateTime))
-    } catch (error) {
-      console.error("Error calculating minutes:", error)
-      return 0
     }
   }
 
@@ -110,99 +64,20 @@ export default function PlaytimeChart() {
     }
   }
 
-  const loadPlayers = async () => {
-    try {
-      const res = await fetch('/api/players')
-      if (!res.ok) {
-        console.error('Failed to fetch players:', res.status, res.statusText)
-        setPlayers([])
-        return
-      }
-      const data = await res.json()
-      // Ensure data is always an array
-      if (Array.isArray(data)) {
-        setPlayers(data)
-      } else {
-        console.error('API returned non-array data:', data)
-        setPlayers([])
-      }
-    } catch (error) {
-      console.error('Error loading players:', error)
-      setPlayers([]) // Set to empty array on error
-    }
-  }
-
-  const handleSubmitPlaytime = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selectedPlayerId) {
-      alert('Please select a player')
-      return
-    }
-
-    // Calculate minutes from start/end time if provided, otherwise use manual minutes
-    let minutes = 0
-    let startTime: string | undefined = undefined
-    let endTime: string | undefined = undefined
-
-    let requestBody: any = {
-      playedOn: inputDate,
-    }
-
-    if (inputStartTime && inputEndTime) {
-      // If times are provided, send times only (minutes will be calculated on server)
-      requestBody.startTime = inputStartTime
-      requestBody.endTime = inputEndTime
-    } else if (inputMinutes && inputMinutes.trim() !== '') {
-      // If minutes are provided, send minutes only
-      const parsedMinutes = parseInt(inputMinutes)
-      if (isNaN(parsedMinutes) || parsedMinutes < 0) {
-        alert('Please enter a valid number of minutes')
-        return
-      }
-      requestBody.minutes = parsedMinutes
-    } else {
-      alert('Please provide either start/end time or minutes')
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      const res = await fetch(`/api/players/${selectedPlayerId}/playtime`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      })
-
-      if (res.ok) {
-        setInputDialogOpen(false)
-        setSelectedPlayerId('')
-        setInputDate(format(new Date(), 'yyyy-MM-dd'))
-        setInputStartTime('')
-        setInputEndTime('')
-        setInputMinutes('')
-        loadData() // Refresh the chart
-        alert('Playtime entry added successfully!')
-      } else {
-        const error = await res.json()
-        alert(error.error || 'Failed to add playtime entry')
-      }
-    } catch (error) {
-      console.error('Error adding playtime entry:', error)
-      alert('Failed to add playtime entry')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   // Prepare data for bar chart (total playtime per player)
   const chartData = topPlayers
     .filter(player => player.totalMinutes > 0) // Only include players with playtime
-    .map(player => ({
-      name: player.telegramHandle.length > 15 ? player.telegramHandle.substring(0, 15) + '...' : player.telegramHandle,
-      fullName: player.telegramHandle,
-      minutes: player.totalMinutes,
-      formatted: formatMinutes(player.totalMinutes),
-    }))
+    .map(player => {
+      const displayName = player.label
+      const shortName =
+        displayName.length > 15 ? displayName.substring(0, 15) + '...' : displayName
+      return {
+        name: shortName,
+        fullName: displayName,
+        minutes: player.totalMinutes,
+        formatted: formatMinutes(player.totalMinutes),
+      }
+    })
 
   return (
     <>
@@ -227,9 +102,6 @@ export default function PlaytimeChart() {
                   <SelectItem value="year">Year</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={() => setInputDialogOpen(true)}>
-                Add Playtime Entry
-              </Button>
             </div>
           </div>
         </CardHeader>
@@ -270,91 +142,6 @@ export default function PlaytimeChart() {
           )}
         </CardContent>
       </Card>
-
-      {/* Add Playtime Entry Dialog */}
-      <Dialog open={inputDialogOpen} onOpenChange={setInputDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Playtime Entry</DialogTitle>
-            <DialogDescription>Record playtime with date and time, or enter minutes manually</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmitPlaytime}>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="player-select">Player</Label>
-                <Select value={selectedPlayerId} onValueChange={setSelectedPlayerId} required>
-                  <SelectTrigger id="player-select">
-                    <SelectValue placeholder="Select a player" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {safePlayers.map((player) => (
-                      <SelectItem key={player.id} value={player.id}>
-                        {player.telegramHandle}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="date-input">Date</Label>
-                  <Input
-                    id="date-input"
-                    type="date"
-                    value={inputDate}
-                    onChange={(e) => setInputDate(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="start-time-input">Start Time</Label>
-                  <Input
-                    id="start-time-input"
-                    type="time"
-                    value={inputStartTime}
-                    onChange={(e) => setInputStartTime(e.target.value)}
-                    placeholder="HH:MM"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="end-time-input">End Time</Label>
-                  <Input
-                    id="end-time-input"
-                    type="time"
-                    value={inputEndTime}
-                    onChange={(e) => setInputEndTime(e.target.value)}
-                    placeholder="HH:MM"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="minutes-input">Or Minutes (manual)</Label>
-                  <Input
-                    id="minutes-input"
-                    type="number"
-                    min="0"
-                    value={inputMinutes}
-                    onChange={(e) => setInputMinutes(e.target.value)}
-                    placeholder="120"
-                  />
-                </div>
-              </div>
-              {(inputStartTime && inputEndTime) && (
-                <div className="text-sm text-muted-foreground">
-                  Calculated: {formatMinutes(calculateMinutes(inputDate, inputStartTime, inputEndTime))}
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setInputDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={submitting || (!inputStartTime && !inputEndTime && !inputMinutes)}>
-                {submitting ? 'Adding...' : 'Add Entry'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

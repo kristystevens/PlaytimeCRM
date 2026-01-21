@@ -96,9 +96,9 @@ export async function GET(request: NextRequest) {
     const agentsWithMetrics = agents.map((agent) => {
       // Find the most recent lastActiveAt from referred players or agent's own player profile
       const referredPlayerLastActive = agent.referredPlayers
-        .map(p => p.lastActiveAt)
-        .filter((date): date is Date => date !== null)
-        .sort((a, b) => b.getTime() - a.getTime())[0] || null
+        .map((p: { lastActiveAt: Date | null }) => p.lastActiveAt)
+        .filter((date: Date | null): date is Date => date !== null)
+        .sort((a: Date, b: Date) => b.getTime() - a.getTime())[0] || null
       
       const agentLastActive = agent.player?.lastActiveAt || null
       
@@ -137,17 +137,13 @@ export async function POST(request: NextRequest) {
     const playerData = {
       telegramHandle: validated.telegramHandle,
       ginzaUsername: validated.ginzaUsername,
-      country: validated.country,
       isAgent: true,
-      vipTier: validated.vipTier || 'MEDIUM',
       status: validated.status || 'ACTIVE',
-      churnRisk: validated.churnRisk || 'LOW',
-      skillLevel: validated.skillLevel || 'AMATEUR',
       notes: validated.notes,
     }
 
     if (!player) {
-      // Always auto-assign sequential playerID for new hosts
+      // Always auto-assign sequential playerID for new agents
       const playerID = await getNextPlayerID()
       player = await prisma.player.create({
         data: {
@@ -159,13 +155,13 @@ export async function POST(request: NextRequest) {
     } else {
       // Update existing player to be an agent with all fields
       // If player doesn't have a playerID, assign one
+      const updateData: any = { ...playerData }
       if (!player.playerID) {
-        const playerID = await getNextPlayerID()
-        playerData.playerID = playerID
+        updateData.playerID = await getNextPlayerID()
       }
       player = await prisma.player.update({
         where: { id: player.id },
-        data: playerData,
+        data: updateData,
       })
     }
 
@@ -177,7 +173,7 @@ export async function POST(request: NextRequest) {
         ginzaUsername: validated.ginzaUsername,
         timezone: validated.timezone,
         playerId: player.id,
-        status: validated.agentStatus || 'ACTIVE',
+        status: validated.status || 'ACTIVE',
         notes: validated.notes,
       },
       include: {

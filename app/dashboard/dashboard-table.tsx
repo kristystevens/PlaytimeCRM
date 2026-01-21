@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import Link from 'next/link'
 import { formatMinutes } from '@/lib/playtime-utils'
+import { capitalizeFirst } from '@/lib/utils'
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
@@ -15,7 +16,7 @@ type Player = {
   ginzaUsername: string | null
   playerID?: string | null
   status: string
-  country: string | null
+  preferredTimeZones: string | null
   skillLevel: string
   churnRisk: string
   vipTier: string
@@ -113,10 +114,15 @@ export default function DashboardTable({
                       <td className="p-3">#{idx + 1}</td>
                       <td className="p-3">
                         <div className="flex flex-col">
-                          <span className="font-medium">{player.telegramHandle}</span>
-                          {player.playerID && (
-                            <span className="text-xs text-muted-foreground">ID: {player.playerID}</span>
-                          )}
+                          <span className="font-medium">
+                            {capitalizeFirst(player.ginzaUsername) || capitalizeFirst(player.telegramHandle)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {player.ginzaUsername && player.telegramHandle
+                              ? `${capitalizeFirst(player.ginzaUsername)} • ${capitalizeFirst(player.telegramHandle)}`
+                              : capitalizeFirst(player.ginzaUsername) || capitalizeFirst(player.telegramHandle)}
+                            {player.playerID && ` • ID: ${player.playerID}`}
+                          </span>
                         </div>
                       </td>
                       <td className="p-3">
@@ -177,14 +183,23 @@ export default function DashboardTable({
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                             <div>
                               <p className="text-muted-foreground">Ginza Username</p>
-                              <p className="font-medium">{player.ginzaUsername || '-'}</p>
+                              <p className="font-medium">{capitalizeFirst(player.ginzaUsername) || '-'}</p>
                             </div>
                             <div>
-                              <p className="text-muted-foreground">Country</p>
-                              <p className="font-medium">{player.country || '-'}</p>
+                              <p className="text-muted-foreground">Preferred Time Zones</p>
+                              <p className="font-medium">
+                                {(() => {
+                                  try {
+                                    const parsed = JSON.parse(player.preferredTimeZones || '[]')
+                                    return Array.isArray(parsed) && parsed.length > 0 ? parsed.join(', ') : '-'
+                                  } catch {
+                                    return '-'
+                                  }
+                                })()}
+                              </p>
                             </div>
                             <div>
-                              <p className="text-muted-foreground">Skill Level</p>
+                              <p className="text-muted-foreground">Player Type</p>
                               <p className="font-medium">{player.skillLevel}</p>
                             </div>
                             <div>

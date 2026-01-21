@@ -6,6 +6,7 @@ import PlaytimeChart from './playtime-chart'
 import { formatMinutes } from '@/lib/playtime-utils'
 import DashboardTable from './dashboard-table'
 import { parse, format, addHours } from 'date-fns'
+import QuickGameEntryCard from './quick-game-entry-card'
 
 // Round time to nearest hour
 function roundToNearestHour(time: string): string {
@@ -90,6 +91,11 @@ async function getDashboardData() {
       assignedRunner: true,
       referredByAgent: true,
       playtimeEntries: true,
+      gamePlayers: {
+        include: {
+          game: true,
+        },
+      },
     },
   })
 
@@ -120,54 +126,40 @@ async function getDashboardData() {
     (p) => p.lastActiveAt && p.lastActiveAt >= sevenDaysAgo
   ).length
 
-  // Count hosts the same way as the hosts page - players with isAgent = true
-  const hostPlayers = safePlayers.filter((p: any) => p.isAgent === true)
-  const totalHosts = hostPlayers.length
+  // Count agents the same way as the agents page - players with isAgent = true
+  const agentPlayers = safePlayers.filter((p: any) => p.isAgent === true)
+  const totalAgents = agentPlayers.length
 
   const topPlayersByPlaytime = safePlayers
-    .map((p) => {
-      const playtimeEntries = Array.isArray(p.playtimeEntries) ? p.playtimeEntries : []
-      const totalPlaytime = playtimeEntries.reduce((sum, entry) => sum + entry.minutes, 0)
-      const mostActiveTimes = calculateMostActiveTimes(
-        playtimeEntries.map(e => ({ startTime: e.startTime, endTime: e.endTime }))
+    .map((p: any) => {
+      const gamePlayers = Array.isArray(p.gamePlayers) ? p.gamePlayers : []
+
+      // Total playtime now sourced from game data (GamePlayer.playtimeMinutes)
+      const totalPlaytime = gamePlayers.reduce(
+        (sum: number, gp: any) => sum + (gp.playtimeMinutes || 0),
+        0,
       )
-      
-      // Calculate last gameplay datetime from most recent playtime entry
+
+      // Last gameplay time from most recent game record, if available
       let lastGameplayAt: Date | null = null
-      if (playtimeEntries.length > 0) {
-        // Sort entries by playedOn descending to get most recent
-        const sortedEntries = [...playtimeEntries].sort((a, b) => 
-          new Date(b.playedOn).getTime() - new Date(a.playedOn).getTime()
-        )
-        const mostRecentEntry = sortedEntries[0]
-        const playedOnDate = new Date(mostRecentEntry.playedOn)
-        
-        // If there's an endTime, combine playedOn date with endTime to get full datetime
-        if (mostRecentEntry.endTime) {
-          try {
-            const [hours, minutes] = mostRecentEntry.endTime.split(':').map(Number)
-            const gameplayEnd = new Date(playedOnDate)
-            gameplayEnd.setHours(hours, minutes, 0, 0)
-            lastGameplayAt = gameplayEnd
-          } catch (error) {
-            // If parsing fails, use playedOn date at end of day
-            const gameplayEnd = new Date(playedOnDate)
-            gameplayEnd.setHours(23, 59, 59, 999)
-            lastGameplayAt = gameplayEnd
-          }
-        } else {
-          // If no endTime, use playedOn date at end of day (23:59:59)
-          const gameplayEnd = new Date(playedOnDate)
-          gameplayEnd.setHours(23, 59, 59, 999)
-          lastGameplayAt = gameplayEnd
+      if (gamePlayers.length > 0) {
+        const sortedByGame = [...gamePlayers].sort((a, b) => {
+          const aDate = a.game?.playedAt ? new Date(a.game.playedAt).getTime() : 0
+          const bDate = b.game?.playedAt ? new Date(b.game.playedAt).getTime() : 0
+          return bDate - aDate
+        })
+        const mostRecent = sortedByGame[0]
+        if (mostRecent?.game?.playedAt) {
+          lastGameplayAt = new Date(mostRecent.game.playedAt)
         }
       }
-      
+
       return {
         ...p,
         totalPlaytime,
-        mostActiveTimes,
-        lastActiveAt: lastGameplayAt || p.lastActiveAt, // Use gameplay time if available, otherwise fall back to stored lastActiveAt
+        // Most active times are no longer calculated from manual logs; show '-' for now
+        mostActiveTimes: '-',
+        lastActiveAt: lastGameplayAt || p.lastActiveAt,
       }
     })
     .sort((a, b) => b.totalPlaytime - a.totalPlaytime)
@@ -196,8 +188,8 @@ async function getDashboardData() {
     }))
     .sort((a, b) => b.retention - a.retention)
 
-  // Count active hosts (players with isAgent = true and status = 'ACTIVE')
-  const activeHosts = hostPlayers.filter(
+  // Count active agents (players with isAgent = true and status = 'ACTIVE')
+  const activeAgents = agentPlayers.filter(
     (p: any) => p.status === 'ACTIVE'
   ).length
 
@@ -205,8 +197,8 @@ async function getDashboardData() {
     activePlayers,
     activePlayers7d,
     totalPlayers: safePlayers.length,
-    totalHosts,
-    activeHosts,
+    totalAgents,
+    activeAgents,
     topPlayersByPlaytime,
     topAgents,
     topRunners,
@@ -245,22 +237,25 @@ export default async function DashboardPage() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Hosts</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Agents</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.totalHosts}</div>
+            <div className="text-2xl font-bold">{data.totalAgents}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Hosts</CardTitle>
+            <CardTitle className="text-sm font-medium">Active Agents</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.activeHosts}</div>
-            <p className="text-xs text-muted-foreground">out of {data.totalHosts} total</p>
+            <div className="text-2xl font-bold">{data.activeAgents}</div>
+            <p className="text-xs text-muted-foreground">out of {data.totalAgents} total</p>
           </CardContent>
         </Card>
       </div>
+
+      {/* Quick Game Entry */}
+      <QuickGameEntryCard />
 
       {/* Dashboard Table with Dropdowns */}
       <DashboardTable 

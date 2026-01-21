@@ -3,7 +3,7 @@
 ## ✅ Completed
 - ✅ Code committed and pushed to `main` branch
 - ✅ Prisma schema configured for PostgreSQL
-- ✅ All recent changes included (hosts, playerID auto-assignment, filters, etc.)
+- ✅ All recent changes included (agents, playerID auto-assignment, filters, etc.)
 
 ## 🔄 Next Steps for Vercel Deployment
 
@@ -88,7 +88,7 @@ After deployment, check:
 - [ ] Application loads without errors
 - [ ] Database connection works
 - [ ] Can create/view players
-- [ ] Can create/view hosts
+- [ ] Can create/view agents
 - [ ] Playtime tracking works
 - [ ] Dashboard loads correctly
 
