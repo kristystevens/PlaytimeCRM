@@ -16,10 +16,27 @@ function createPrismaClient() {
 
   return new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    // Configure for serverless environments
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL,
+      },
+    },
   })
 }
 
+// Use singleton pattern for both development and production (important for serverless)
 export const prisma = globalForPrisma.prisma ?? createPrismaClient()
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+if (!globalForPrisma.prisma) {
+  globalForPrisma.prisma = prisma
+}
+
+// Handle graceful shutdown in serverless environments
+if (process.env.NODE_ENV === 'production') {
+  // Disconnect on process termination
+  process.on('beforeExit', async () => {
+    await prisma.$disconnect()
+  })
+}
 
