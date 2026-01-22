@@ -122,8 +122,8 @@ export async function GET(request: NextRequest) {
     }
     if (search) {
       where.OR = [
-        { telegramHandle: { contains: search, mode: 'insensitive' } },
-        { ginzaUsername: { contains: search, mode: 'insensitive' } },
+        { telegramHandle: { contains: search } },
+        { ginzaUsername: { contains: search } },
       ]
     }
 
@@ -293,8 +293,8 @@ export async function POST(request: NextRequest) {
     const playerID = await getNextPlayerID()
     
     const playerData: any = {
-      telegramHandle: validated.telegramHandle,
-      ginzaUsername: validated.ginzaUsername,
+        telegramHandle: validated.telegramHandle,
+        ginzaUsername: validated.ginzaUsername,
       preferredTimeZones: validated.preferredTimeZones ? JSON.stringify(validated.preferredTimeZones) : '[]',
         playerType: validated.playerType || 'PLAYER',
         isRunner,
